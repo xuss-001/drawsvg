@@ -6,7 +6,7 @@ import string
 import xml.sax.saxutils as xml
 
 from . import (
-    types, elements as elements_module, raster, video, jupyter,
+    types, elements as elements_module, layer, raster, video, jupyter,
     native_animation, font_embed,
 )
 
@@ -135,6 +135,13 @@ class Drawing:
             self.append(elements, z=z)
         else:
             self.extend(elements, z=z)
+    def to_drawables(self, **kwargs):
+        '''Return this drawing as a `DrawingLayer` for embedding via `draw()`.
+
+        Keyword arguments are passed to `DrawingLayer`, so `x`, `y`, `width`,
+        and `height` can be used to place and size the embedded drawing.
+        '''
+        return [layer.DrawingLayer(self, **kwargs)]
     def append(self, element, *, z=None):
         '''Add any `DrawingElement` to the drawing.
 
@@ -146,6 +153,27 @@ class Drawing:
             self.ordered_elements[z].append(element)
         else:
             self.elements.append(element)
+    def add_layer(self, drawing, x=0, y=0, width=None, height=None, *,
+                  id_prefix=None, z=None, **kwargs):
+        '''Embed another `Drawing` as an independent layer.
+
+        The layer is placed at (`x`, `y`) and displayed with the given `width`
+        and `height`. If omitted, the source drawing's own width and height are
+        used. The source drawing's `viewBox` is preserved, so its coordinate
+        system and element stacking order remain unchanged.
+
+        Explicit ids and internal id references in the source drawing are
+        prefixed per layer, preventing equal ids in different layers from
+        interfering with each other. Shared resources within one layer are
+        still emitted once and reused. The source drawing is not modified.
+
+        Returns the created `DrawingLayer` element.
+        '''
+        new_layer = layer.DrawingLayer(
+            drawing, x=x, y=y, width=width, height=height,
+            id_prefix=id_prefix, **kwargs)
+        self.append(new_layer, z=z)
+        return new_layer
     def extend(self, iterable, *, z=None):
         if z is not None:
             self.ordered_elements[z].extend(iterable)

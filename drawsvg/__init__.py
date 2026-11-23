@@ -70,6 +70,7 @@ Example:
 from .defs import *
 from .raster import Raster
 from .drawing import Drawing
+from .layer import DrawingLayer, Layer
 from .types import (
     Context,
     DrawingElement,

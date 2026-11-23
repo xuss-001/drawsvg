@@ -22,6 +22,36 @@ It is recommended to use a unique `id_prefix` for each svg if you embed multiple
 d = dw.Drawing(400, 300, id_prefix='pic')
 ```
 
+### Embedding Drawings as Layers
+
+```python
+layer = d.add_layer(drawing, x=0, y=0, width=None, height=None,
+                    id_prefix=None, **svg_args)
+
+layer = dw.DrawingLayer(drawing, x=0, y=0, width=200, height=100)
+d.append(layer)
+
+d.draw(drawing, x=0, y=0, width=200, height=100)
+```
+
+`add_layer` embeds another drawing as a nested `<svg>` layer.  `x` and
+`y` set its position in the parent drawing; `width` and `height` set its
+display size (the source drawing's size is used by default).  The source
+drawing's `viewBox` is kept, along with element order, transforms, gradients,
+clip paths, masks, and internal `Use` references.
+
+Each layer namespace-rewrites the source drawing's explicit ids, so equal ids
+in different layers do not refer to each other.  Resources shared within one
+layer are still emitted once and reused.  Combined drawings can be embedded
+again.  Combining and exporting do not modify the source drawings.
+
+Only drawsvg elements and drawsvg-internal references are handled.  Arbitrary
+XML in `Raw` content, external resources, and animations are not rewritten
+or otherwise interpreted.
+
+See `examples/embed_layers.py` for same-named gradients, clipping, and nested
+`Use` references across multiple layers.
+
 
 ## Basic Shapes
 

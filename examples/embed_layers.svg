@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="600" height="240" viewBox="0 0 600 240">
+<defs>
+<linearGradient x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse" id="dL0_paint">
+<stop offset="0" stop-color="#ff7b00" />
+<stop offset="1" stop-color="#ff0055" />
+</linearGradient>
+<clipPath id="dL0_clip">
+<circle cx="60" cy="60" r="48" />
+</clipPath>
+<circle cx="60" cy="60" r="28" fill="url(#dL0_paint)" id="dL0_petal" />
+<g id="dL0_badge">
+<circle cx="60" cy="60" r="48" fill="none" stroke="url(#dL0_paint)" stroke-width="8" clip-path="url(#dL0_clip)" />
+<use xlink:href="#dL0_petal" x="0" y="0" />
+</g>
+<linearGradient x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse" id="dL1_paint">
+<stop offset="0" stop-color="#00d4ff" />
+<stop offset="1" stop-color="#0055ff" />
+</linearGradient>
+<clipPath id="dL1_clip">
+<circle cx="60" cy="60" r="48" />
+</clipPath>
+<circle cx="60" cy="60" r="28" fill="url(#dL1_paint)" id="dL1_petal" />
+<g id="dL1_badge">
+<circle cx="60" cy="60" r="48" fill="none" stroke="url(#dL1_paint)" stroke-width="8" clip-path="url(#dL1_clip)" />
+<use xlink:href="#dL1_petal" x="0" y="0" />
+</g>
+<linearGradient x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse" id="innerL3_dL2_paint">
+<stop offset="0" stop-color="#aaff00" />
+<stop offset="1" stop-color="#00aa55" />
+</linearGradient>
+<clipPath id="innerL3_dL2_clip">
+<circle cx="60" cy="60" r="48" />
+</clipPath>
+<circle cx="60" cy="60" r="28" fill="url(#innerL3_dL2_paint)" id="innerL3_dL2_petal" />
+<g id="innerL3_dL2_badge">
+<circle cx="60" cy="60" r="48" fill="none" stroke="url(#innerL3_dL2_paint)" stroke-width="8" clip-path="url(#innerL3_dL2_clip)" />
+<use xlink:href="#innerL3_dL2_petal" x="0" y="0" />
+</g>
+</defs>
+<rect x="0" y="0" width="600" height="240" fill="#20242c" />
+<svg x="40" y="60" width="120" height="120" viewBox="0 0 120 120">
+<use xlink:href="#dL0_badge" />
+<use xlink:href="#dL0_badge" x="24" y="0" opacity="0.35" />
+</svg>
+<svg x="210" y="60" width="120" height="120" viewBox="0 0 120 120">
+<use xlink:href="#dL1_badge" />
+<use xlink:href="#dL1_badge" x="24" y="0" opacity="0.35" />
+</svg>
+<svg x="400" y="80" width="150" height="70" viewBox="0 0 300 140">
+<svg x="20" y="10" width="120" height="120" viewBox="0 0 120 120">
+<use xlink:href="#innerL3_dL2_badge" />
+<use xlink:href="#innerL3_dL2_badge" x="24" y="0" opacity="0.35" />
+</svg>
+</svg>
+</svg>
