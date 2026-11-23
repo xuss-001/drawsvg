@@ -363,6 +363,47 @@ svg {{
     def save_svg(self, fname, encoding='utf-8', context=None):
         with open(fname, 'w', encoding=encoding) as f:
             self.as_svg(output_file=f, context=context)
+    def as_snapshot_svg(self, time, output_file=None, context=None,
+                        **as_svg_kwargs):
+        '''Exports a static SVG snapshot of the animation at a playback time.
+
+        The returned SVG contains no animation elements, playback controls,
+        or scripts, so it can be used with renderers that do not support
+        SVG animation.  Static shapes, gradients, and internal references
+        are preserved.
+
+        Args:
+            time: Playback time in seconds, measured from animation playback
+                start.  The configured start delay, end delay, and repeat
+                iterations are all included (each iteration keeps both
+                delays).  After a finite repeat count finishes, the
+                configured fill mode applies: 'freeze' keeps the last frame
+                while 'remove' restores the original attribute values.
+            output_file: Optional file object to write to.  If omitted, the
+                SVG string is returned.
+            context: Optional context override (defaults to the drawing's
+                context).
+
+        Only attribute animations created with `add_key_frame` and
+        `add_attribute_key_sequence` are evaluated.  The drawing and its
+        animation are not modified, so snapshots at different times can be
+        exported independently.
+        '''
+        if context is None:
+            context = self.context
+        config = context.animation_config
+        if config is None:
+            config = native_animation.SyncedAnimationConfig(duration=0)
+        context = config.snapshot_context(context, time)
+        as_svg_kwargs.setdefault('skip_js', True)
+        return self.as_svg(output_file, context=context, **as_svg_kwargs)
+    def save_snapshot_svg(self, fname, time, encoding='utf-8', context=None):
+        '''Saves a static SVG snapshot of the animation at a playback time.
+
+        See `as_snapshot_svg` for details.
+        '''
+        with open(fname, 'w', encoding=encoding) as f:
+            self.as_snapshot_svg(time, output_file=f, context=context)
     def save_html(self, fname, title=None, encoding='utf-8', context=None):
         with open(fname, 'w', encoding=encoding) as f:
             self.as_html(output_file=f, title=title, context=context)

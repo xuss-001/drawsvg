@@ -8,6 +8,12 @@ from .. import elements, types
 from . import playback_control_ui, playback_control_js
 
 
+# Sentinel returned when an animated attribute should be restored to the
+# element's original (un-animated) value, e.g. fill='remove' after a finite
+# number of repeat iterations has finished.
+RESTORE_ATTRIBUTE = object()
+
+
 @dataclasses.dataclass
 class SyncedAnimationConfig:
     # Animation settings
@@ -17,6 +23,7 @@ class SyncedAnimationConfig:
     repeat_count: Union[int, str] = 'indefinite'
     fill: str = 'freeze'
     freeze_frame_at: Optional[float] = None
+    snapshot_at: Optional[float] = None
 
     # Playback controls
     show_playback_progress: bool = False
@@ -53,18 +60,24 @@ class SyncedAnimationConfig:
         return []
 
     def extra_javascript(self, d, context):
+        if self.snapshot_at is not None:
+            return []
         config = self._with_filled_defaults(d, context)
         if self.show_playback_controls:
             return [config.controls_js]
         return []
 
     def extra_onload_js(self, d, context):
+        if self.snapshot_at is not None:
+            return []
         config = self._with_filled_defaults(d, context)
         if self.show_playback_controls:
             return [config.controls_js_onload]
         return []
 
     def extra_drawing_elements(self, d, context):
+        if self.snapshot_at is not None:
+            return []
         config = self._with_filled_defaults(d, context)
         if self.show_playback_progress or self.show_playback_controls:
             # Control UI
@@ -96,12 +109,26 @@ class SyncedAnimationConfig:
                 controls_js=js)
 
     def override_args(self, args, lcontext):
-        if (self.freeze_frame_at is not None
-                and hasattr(lcontext.element, 'animation_data')):
+        if not hasattr(lcontext.element, 'animation_data'):
+            return args
+        data = lcontext.element.animation_data
+        if self.snapshot_at is not None:
             args = dict(args)
-            data = lcontext.element.animation_data
+            args.update(data.snapshot_values_at_time(self.snapshot_at, self))
+        elif self.freeze_frame_at is not None:
+            args = dict(args)
             args.update(data.interpolate_at_time(self.freeze_frame_at))
         return args
+
+    def snapshot_context(self, context, at_time):
+        '''Returns a context for exporting a static snapshot at a playback
+        time (in seconds, measured from animation playback start).'''
+        return dataclasses.replace(
+                context,
+                animation_config=dataclasses.replace(
+                    self, snapshot_at=at_time,
+                    show_playback_progress=False,
+                    show_playback_controls=False))
 
 
 @dataclasses.dataclass
@@ -132,6 +159,55 @@ class AnimatedAttributeTimeline:
 
     def interpolate_at_time(self, at_time):
         return linear_interpolate_value(self.times, self.values, at_time)
+
+    def snapshot_value_at_time(self, at_time, config: SyncedAnimationConfig):
+        '''Interpolated value at a playback time in seconds.
+
+        The playback time is measured from animation playback start and
+        includes the configured start delay, end delay, and every repeat
+        iteration (each iteration keeps both delays).  After a finite
+        repeat count finishes, the fill mode applies: 'freeze' keeps the
+        final value while any other fill (e.g. 'remove') restores the
+        element's original attribute value (returned as RESTORE_ATTRIBUTE).
+        '''
+        if not self.times:
+            return RESTORE_ATTRIBUTE
+        start_delay = config.start_delay
+        cycle_duration = (
+                config.start_delay + config.duration + config.end_delay)
+        at_time = max(0, at_time)
+        if cycle_duration <= 0:
+            local_time = 0
+            ended = config.repeat_count != 'indefinite'
+        elif config.repeat_count == 'indefinite':
+            local_time = at_time % cycle_duration
+            ended = False
+        elif at_time >= config.repeat_count * cycle_duration:
+            local_time = 0
+            ended = True
+        else:
+            local_time = at_time % cycle_duration
+            ended = False
+        if ended:
+            if config.fill == 'freeze':
+                return self.values[-1]
+            return RESTORE_ATTRIBUTE
+        # Pad the timeline to hold the first value during the start delay
+        # and the last value during the end delay of each iteration.
+        padded_times = [0]
+        padded_values = [self.values[0]]
+        for t, v in zip(self.times, self.values):
+            t = max(0, min(cycle_duration, start_delay + t))
+            if t == padded_times[-1]:
+                padded_values[-1] = v
+            else:
+                padded_times.append(t)
+                padded_values.append(v)
+        if padded_times[-1] < cycle_duration:
+            padded_times.append(cycle_duration)
+            padded_values.append(self.values[-1])
+        return linear_interpolate_value(padded_times, padded_values,
+                                        local_time)
 
     def as_animate_element(self, config: Optional[SyncedAnimationConfig]=None):
         if config is not None:
@@ -199,6 +275,19 @@ class AnimationHelperData:
             for name, timeline in self.attr_timelines.items()
         }
 
+    def snapshot_values_at_time(self, at_time, config):
+        '''Interpolated attribute values at a playback time in seconds.
+
+        Attributes that should be restored to their original value (e.g.
+        fill='remove' after the final repeat iteration) are omitted.
+        '''
+        return {
+            name: value
+            for name, timeline in self.attr_timelines.items()
+            if (value := timeline.snapshot_value_at_time(
+                    at_time, config)) is not RESTORE_ATTRIBUTE
+        }
+
     def _timelines_adjusted_for_context(self, lcontext=None):
         all_timelines = dict(self.attr_timelines)
         if lcontext is not None and lcontext.context.invert_y:
@@ -240,11 +329,12 @@ class AnimationHelperData:
         return all_timelines
 
     def children_with_context(self, lcontext=None):
-        if (lcontext is not None
-                and lcontext.context.animation_config is not None
-                and lcontext.context.animation_config.freeze_frame_at
-                    is not None):
-            return []  # Don't animate if frame is frozen
+        if lcontext is not None:
+            config = lcontext.context.animation_config
+            if (config is not None
+                    and (config.freeze_frame_at is not None
+                         or config.snapshot_at is not None)):
+                return []  # Don't animate if a static frame is exported
         all_timelines = self._timelines_adjusted_for_context(lcontext)
         return [
             timeline.as_animate_element(lcontext.context.animation_config)
