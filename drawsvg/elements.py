@@ -1,5 +1,8 @@
 import math
+import numbers
 import os.path
+import re
+import unicodedata
 import warnings
 import xml.sax.saxutils as xml
 
@@ -11,6 +14,300 @@ from .types import (
 
 def escape_cdata(content):
     return content.replace(']]>', ']]]]><![CDATA[>')
+
+
+_LINE_BREAK_RE = re.compile(r'\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]')
+_WHITESPACE_RE = re.compile(r'\s+')
+_ELLIPSIS = '\u2026'
+_ZWJ = '\u200d'
+
+
+def _validate_max_width(max_width):
+    if isinstance(max_width, (bool, str, bytes)):
+        raise ValueError('max_width must be a positive finite number')
+    try:
+        width = float(max_width)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError('max_width must be a positive finite number') from None
+    if not math.isfinite(width) or width <= 0:
+        raise ValueError('max_width must be a positive finite number')
+    return width
+
+
+def _validate_max_lines(max_lines):
+    if isinstance(max_lines, bool) or not isinstance(max_lines, numbers.Integral):
+        raise ValueError('max_lines must be a positive integer')
+    max_lines = int(max_lines)
+    if max_lines < 1:
+        raise ValueError('max_lines must be a positive integer')
+    return max_lines
+
+
+def _validate_measure(measure, measure_text):
+    if measure is not None and measure_text is not None:
+        raise TypeError('Specify only one of measure and measure_text')
+    measure = measure if measure is not None else measure_text
+    if not callable(measure):
+        raise TypeError('A callable text measurement function is required')
+    return measure
+
+
+def _measure_text(measure, text):
+    value = measure(text)
+    if isinstance(value, (bool, str, bytes)):
+        raise ValueError('The text measurement function must return a number')
+    try:
+        width = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(
+                'The text measurement function must return a number') from None
+    if not math.isfinite(width) or width < 0:
+        raise ValueError(
+                'The text measurement function must return a non-negative '
+                'finite number')
+    return width
+
+
+def _is_regional_indicator(char):
+    return 0x1F1E6 <= ord(char) <= 0x1F1FF
+
+
+def _is_extend(char):
+    codepoint = ord(char)
+    return (
+        unicodedata.category(char) in ('Mn', 'Mc', 'Me')
+        or 0xFE00 <= codepoint <= 0xFE0F
+        or 0xE0100 <= codepoint <= 0xE01EF
+        or 0x1F3FB <= codepoint <= 0x1F3FF
+        or 0xE0020 <= codepoint <= 0xE007F
+        or codepoint == 0x200C
+    )
+
+
+def _hangul_type(char):
+    codepoint = ord(char)
+    if 0x1100 <= codepoint <= 0x115F or 0xA960 <= codepoint <= 0xA97C:
+        return 'L'
+    if 0x1160 <= codepoint <= 0x11A7 or 0xD7B0 <= codepoint <= 0xD7C6:
+        return 'V'
+    if 0x11A8 <= codepoint <= 0x11FF or 0xD7CB <= codepoint <= 0xD7FB:
+        return 'T'
+    if 0xAC00 <= codepoint <= 0xD7A3:
+        return 'LV' if (codepoint - 0xAC00) % 28 == 0 else 'LVT'
+    return None
+
+
+def _is_virama(char):
+    name = unicodedata.name(char, '')
+    return any(part in name for part in ('VIRAMA', 'HALANTA', 'COENG'))
+
+
+def _grapheme_clusters(text):
+    '''Split text into approximate extended grapheme clusters.'''
+    if not text:
+        return []
+
+    clusters = []
+    cluster = text[0]
+    regional_count = 1 if _is_regional_indicator(text[0]) else 0
+    join_next = False
+
+    for char in text[1:]:
+        if char == _ZWJ:
+            cluster += char
+            join_next = True
+            regional_count = 0
+            continue
+        if join_next:
+            cluster += char
+            join_next = False
+            regional_count = 0
+            continue
+        if _is_extend(char):
+            cluster += char
+            continue
+        previous_hangul = _hangul_type(cluster[-1])
+        current_hangul = _hangul_type(char)
+        if (
+            previous_hangul == 'L'
+            and current_hangul in ('L', 'V', 'LV', 'LVT')
+        ) or (
+            previous_hangul in ('LV', 'V')
+            and current_hangul in ('V', 'T')
+        ) or (
+            previous_hangul in ('LVT', 'T')
+            and current_hangul == 'T'
+        ):
+            cluster += char
+            continue
+        if _is_virama(cluster[-1]):
+            cluster += char
+            regional_count = 0
+            continue
+        if _is_regional_indicator(char):
+            if regional_count % 2 == 1:
+                cluster += char
+                regional_count += 1
+            else:
+                clusters.append(cluster)
+                cluster = char
+                regional_count = 1
+            continue
+        clusters.append(cluster)
+        cluster = char
+        regional_count = 1 if _is_regional_indicator(char) else 0
+
+    clusters.append(cluster)
+    return clusters
+
+
+def _is_cjk_or_kana(char):
+    codepoint = ord(char)
+    return (
+        0x1100 <= codepoint <= 0x11FF
+        or 0x2E80 <= codepoint <= 0x2FFF
+        or 0x3000 <= codepoint <= 0x30FF
+        or 0x3100 <= codepoint <= 0x312F
+        or 0x3130 <= codepoint <= 0x318F
+        or 0x31F0 <= codepoint <= 0x31FF
+        or 0x3400 <= codepoint <= 0x4DBF
+        or 0x4E00 <= codepoint <= 0x9FFF
+        or 0xA000 <= codepoint <= 0xA4CF
+        or 0xAC00 <= codepoint <= 0xD7AF
+        or 0xF900 <= codepoint <= 0xFAFF
+        or 0x20000 <= codepoint <= 0x3134F
+    )
+
+
+def _tokenize_for_wrapping(text):
+    tokens = []
+    word = []
+    space_before = False
+
+    def append_word():
+        nonlocal space_before
+        if word:
+            tokens.append((''.join(word), space_before))
+            word.clear()
+            space_before = False
+
+    for cluster in _grapheme_clusters(text):
+        if cluster.isspace():
+            append_word()
+            space_before = bool(tokens)
+        elif _is_cjk_or_kana(cluster[0]):
+            append_word()
+            tokens.append((cluster, space_before))
+            space_before = False
+        else:
+            word.append(cluster)
+    append_word()
+    return tokens
+
+
+def _break_token(token, measure, max_width):
+    lines = []
+    current = ''
+    for cluster in _grapheme_clusters(token):
+        candidate = current + cluster
+        if not current or _measure_text(measure, candidate) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = cluster
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _wrap_paragraph(paragraph, measure, max_width):
+    tokens = _tokenize_for_wrapping(paragraph)
+    if not tokens:
+        return ['']
+
+    lines = []
+    current = ''
+    for token, space_before in tokens:
+        separator = ' ' if current and space_before else ''
+        candidate = current + separator + token
+        if _measure_text(measure, candidate) <= max_width:
+            current = candidate
+            continue
+        if current:
+            lines.append(current)
+            current = ''
+        if _measure_text(measure, token) <= max_width:
+            current = token
+            continue
+        chunks = _break_token(token, measure, max_width)
+        lines.extend(chunks[:-1])
+        current = chunks[-1]
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _truncate_with_ellipsis(line, measure, max_width):
+    candidate = line + _ELLIPSIS
+    if _measure_text(measure, candidate) <= max_width:
+        return candidate
+
+    clusters = _grapheme_clusters(line)
+    while clusters:
+        clusters.pop()
+        candidate = ''.join(clusters) + _ELLIPSIS
+        if _measure_text(measure, candidate) <= max_width:
+            return candidate
+    if _measure_text(measure, _ELLIPSIS) <= max_width:
+        return _ELLIPSIS
+    return ''
+
+
+def layout_text(text, measure=None, max_width=None, max_lines=None, *,
+                measure_text=None):
+    '''Lay out plain text into automatically wrapped lines.
+
+    ``measure`` (or its alias ``measure_text``) must be a callable that takes
+    a complete line of text and returns its width.  Every wrapping decision
+    measures the complete candidate line, so kerning and other non-additive
+    effects are respected.
+
+    Explicit line breaks and blank lines are preserved.  Other runs of
+    whitespace are collapsed to one space.  Long words and CJK text can break
+    between grapheme clusters, but combining sequences and emoji sequences
+    are kept intact.  If ``max_lines`` is exceeded, the final line is trimmed
+    and an ellipsis is added when it fits.
+
+    Returns a list of line strings.
+    '''
+    if not isinstance(text, str):
+        raise TypeError('text must be a string')
+
+    measure = _validate_measure(measure, measure_text)
+    max_width = _validate_max_width(max_width)
+    max_lines = _validate_max_lines(max_lines)
+
+    lines = []
+    for paragraph in _LINE_BREAK_RE.split(text):
+        paragraph = _WHITESPACE_RE.sub(' ', paragraph).strip()
+        if paragraph:
+            lines.extend(_wrap_paragraph(paragraph, measure, max_width))
+        else:
+            lines.append('')
+
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = _truncate_with_ellipsis(
+                lines[-1], measure, max_width)
+    return lines
+
+
+def wrap_text(text, measure=None, max_width=None, max_lines=None, *,
+              measure_text=None):
+    '''Alias for :func:`layout_text`.'''
+    return layout_text(
+            text, measure=measure, max_width=max_width, max_lines=max_lines,
+            measure_text=measure_text)
 
 
 class NoElement(DrawingElement):
@@ -240,11 +537,16 @@ class Text(DrawingParentElement):
     TAG_NAME = 'text'
     has_content = True
     def __new__(cls, text='', *args, path=None, id=None, _skip_check=False,
-                **kwargs):
+                _layout_done=False, **kwargs):
         # Check for the special case of multi-line text on a path
         # This is inconsistently implemented by renderers so we return a group
         # of single-line text on paths instead.
         if path is not None and not _skip_check:
+            if not _layout_done and cls._has_wrap_arguments(kwargs):
+                text = cls._layout_text_argument(
+                        text, kwargs.get('measure'),
+                        kwargs.get('measure_text'),
+                        kwargs.get('max_width'), kwargs.get('max_lines'))
             text, _ = cls._handle_text_argument(text, True)
             if len(text) > 1:
                 # Special case
@@ -253,13 +555,15 @@ class Text(DrawingParentElement):
                     subtext = [None] * len(text)
                     subtext[i] = line
                     g.append(Text(subtext, *args, path=path, _skip_check=True,
-                                  **kwargs))
+                                  _layout_done=True, **kwargs))
                 return g
         return super().__new__(cls)
     def __init__(self, text, font_size, x=None, y=None, *, center=False,
                  line_height=1, line_offset=0, path=None, start_offset=None,
                  path_args=None, tspan_args=None, cairo_fix=True,
-                 _skip_check=False, **kwargs):
+                 measure=None, measure_text=None, max_width=None,
+                 max_lines=None, _layout_done=False, _skip_check=False,
+                 **kwargs):
         # Check argument requirements
         if path is None:
             if x is None or y is None:
@@ -278,6 +582,14 @@ class Text(DrawingParentElement):
         if tspan_args is None:
             tspan_args = {}
         on_path = path is not None
+
+        if not _layout_done:
+            wrapping_args = (measure, measure_text, max_width, max_lines)
+            if any(arg is not None for arg in wrapping_args):
+                text = self._layout_text_argument(
+                        text, measure, measure_text, max_width, max_lines)
+                if len(text) == 1 and not on_path:
+                    text = text[0]
 
         text, single_line = self._handle_text_argument(
                 text, force_multi=on_path)
@@ -327,6 +639,42 @@ class Text(DrawingParentElement):
                     tspan = TSpan(line, dy=dy, **tspan_args)
                     self._text_path.append(tspan)
                 self.append(self._text_path)
+    @staticmethod
+    def _has_wrap_arguments(kwargs):
+        return any(kwargs.get(name) is not None
+                   for name in ('measure', 'measure_text', 'max_width',
+                                'max_lines'))
+    @staticmethod
+    def _layout_text_argument(text, measure, measure_text, max_width,
+                              max_lines):
+        wrapping_args = (measure, measure_text, max_width, max_lines)
+        if not any(arg is not None for arg in wrapping_args):
+            return text
+        has_measure = measure is not None or measure_text is not None
+        if not has_measure or max_width is None or max_lines is None:
+            raise TypeError(
+                    'measure, max_width, and max_lines must be specified '
+                    'together')
+        measure = _validate_measure(measure, measure_text)
+        max_width = _validate_max_width(max_width)
+        max_lines = _validate_max_lines(max_lines)
+        if isinstance(text, str):
+            return tuple(layout_text(
+                    text, measure=measure, max_width=max_width,
+                    max_lines=max_lines))
+        try:
+            text = tuple(text)
+        except TypeError:
+            raise TypeError(
+                    'text must be a string or an iterable of strings') \
+                    from None
+        if not all(isinstance(line, str) for line in text):
+            raise TypeError('text must be a string or an iterable of strings')
+        if not text:
+            return ()
+        return tuple(layout_text(
+                '\n'.join(text), measure=measure, max_width=max_width,
+                max_lines=max_lines))
     @staticmethod
     def _handle_text_argument(text, force_multi=False):
         # Handle multi-line text (contains '\n' or is a list of strings)

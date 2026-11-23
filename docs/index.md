@@ -577,7 +577,8 @@ d.append(p.M(50, 10).h(30).v(50).Z())
 dw.Text(text, fontSize, x=None, y=None, *, center=False,
         line_height=1, line_offset=0, path=None,
         start_offset=None, path_args=None, tspan_args=None,
-        cairo_fix=True, **kwargs)
+        cairo_fix=True, measure=None, measure_text=None,
+        max_width=None, max_lines=None, **kwargs)
 ```
 
 ### Fill and Outline
@@ -801,6 +802,54 @@ d.append(dw.Text(ts, 14, 150, 20, text_anchor='middle'))
 ```
 
 ![svg](img/04_multiline_text.svg)
+
+### Automatic Wrapping
+
+`Text` can wrap a string automatically when a width measurement function,
+`max_width`, and `max_lines` are supplied.  The measurement function receives
+a complete candidate line and returns its width; this allows text shaping
+libraries or locally loaded fonts to account for kerning and other
+non-additive effects.  No fonts are fetched by drawsvg.
+
+Explicit line breaks and blank lines are preserved.  Other runs of whitespace
+are collapsed to one space.  English words stay whole where possible, while
+overlong words and CJK text break between complete grapheme clusters.
+Combining sequences and emoji sequences are not split.  When the line limit
+is exceeded, the last line is shortened and an ellipsis is added if it fits;
+if even the ellipsis is too wide, that line is left empty.
+
+```python
+import unicodedata
+
+def measure_text(line):
+    return sum(
+        2 if unicodedata.east_asian_width(char) in 'WFA' else 1
+        for char in line
+    )
+
+label = (
+    'DrawSVG 自动换行\n\n'
+    '标签支持 English words 和 emoji 👨‍👩‍👧‍👦，宽度受限时自动截断。'
+)
+
+# The same parameters also work directly on Text.
+lines = dw.layout_text(
+    label, measure=measure_text, max_width=24, max_lines=5)
+d.append(dw.Text(label, 12, 20, 20, measure=measure_text,
+                 max_width=24, max_lines=5))
+```
+
+The resulting lines are:
+
+```python
+[
+    'DrawSVG 自动换行',
+    '',
+    '标签支持 English words',
+    '和 emoji 👨‍👩‍👧‍👦，宽',
+    '度受限时自动截断。',
+]
+```
 
 
 ### Fonts
