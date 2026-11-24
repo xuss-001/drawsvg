@@ -96,6 +96,38 @@ d  # Display as SVG
 
 [![Example output image](https://raw.githubusercontent.com/cduck/drawsvg/master/examples/example1.png)](https://github.com/cduck/drawsvg/blob/master/examples/example1.svg)
 
+### Automatic viewBox
+
+Use `auto_view_box()` to fit the canvas tightly around the drawn geometry.
+Geometry bounds include the full extent of Bézier curves and elliptical arcs,
+including their transformed positions inside nested groups.  A uniform margin
+can be added around all four sides.
+
+```python
+import drawsvg as draw
+
+inner = draw.Group(transform='translate(10, 20) scale(1, -1)')
+curve = draw.Path()
+curve.M(0, 0).C(0, 40, 40, 40, 40, 0)
+inner.append(curve)
+
+outer = draw.Group(transform='rotate(90)')
+outer.append(inner)
+
+d = draw.Drawing(1, 1)
+d.append(outer)
+d.auto_view_box(margin=5)
+
+# Geometry bounds are (-20, 10, 30, 40); the margin expands each side by 5.
+assert tuple(round(v, 9) for v in d.view_box) == (-25, 5, 40, 50)
+d.save_svg('auto-viewbox.svg')
+```
+
+Text, stroke widths, filters, and external resources do not contribute to the
+calculated bounds.  A drawing with no supported geometry raises `ValueError`,
+and unsupported visible elements such as `Use` raise `NotImplementedError`.
+Passing a manual `viewBox` to `Drawing` still works as before.
+
 ### SVG-native animation with playback controls
 ```python
 import drawsvg as draw

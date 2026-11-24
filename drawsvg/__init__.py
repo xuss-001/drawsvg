@@ -70,6 +70,7 @@ Example:
 from .defs import *
 from .raster import Raster
 from .drawing import Drawing
+from .geometry import Bounds, UnsupportedGeometryError
 from .types import (
     Context,
     DrawingElement,

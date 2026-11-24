@@ -6,7 +6,7 @@ import string
 import xml.sax.saxutils as xml
 
 from . import (
-    types, elements as elements_module, raster, video, jupyter,
+    types, elements as elements_module, geometry, raster, video, jupyter,
     native_animation, font_embed,
 )
 
@@ -32,7 +32,8 @@ class Drawing:
     '''
     def __init__(self, width, height, origin=(0,0), context: types.Context=None,
                  animation_config: native_animation.SyncedAnimationConfig | None=None,
-                 id_prefix='d', unit='', **svg_args):
+                 id_prefix='d', unit='', auto_view_box=False,
+                 view_box_margin=0, **svg_args):
         '''
         Args:
             width: The width of the SVG canvas, in units of pixels by default.
@@ -49,6 +50,11 @@ class Drawing:
             unit: Any supported SVG unit, such as 'px' or 'mm', to be used in the `width` and
                 `height` attributes of the `<svg>` tag.  All position and size values in this
                 drawing will be in this unit.
+            auto_view_box: If True, recalculate `view_box` from appended geometry
+                whenever SVG is generated.  `width` and `height` are updated to
+                match the calculated bounds.
+            view_box_margin: Uniform margin added around each edge of an
+                automatically calculated viewBox.
         '''
         if context is None:
             context = types.Context()
@@ -57,18 +63,22 @@ class Drawing:
                     context, animation_config=animation_config)
         self.width = width
         self.height = height
+        origin_auto = isinstance(origin, str) and origin.lower() == 'auto'
         if isinstance(origin, str):
-            if context.invert_y and origin.startswith('bottom-'):
-                origin = origin.replace('bottom-', 'top-')
-            elif context.invert_y and origin.startswith('top-'):
-                origin = origin.replace('top-', 'bottom-')
-            self.view_box = {
-                'center': (-width/2, -height/2, width, height),
-                'top-left': (0, 0, width, height),
-                'top-right': (-width, 0, width, height),
-                'bottom-left': (0, -height, width, height),
-                'bottom-right': (-width, -height, width, height),
-            }[origin]
+            if origin_auto:
+                self.view_box = (0, 0, width, height)
+            else:
+                if context.invert_y and origin.startswith('bottom-'):
+                    origin = origin.replace('bottom-', 'top-')
+                elif context.invert_y and origin.startswith('top-'):
+                    origin = origin.replace('top-', 'bottom-')
+                self.view_box = {
+                    'center': (-width/2, -height/2, width, height),
+                    'top-left': (0, 0, width, height),
+                    'top-right': (-width, 0, width, height),
+                    'bottom-left': (0, -height, width, height),
+                    'bottom-right': (-width, -height, width, height),
+                }[origin]
         else:
             origin = tuple(origin)
             if len(origin) != 2:
@@ -88,14 +98,45 @@ class Drawing:
         self.id_prefix = str(id_prefix)
         self.unit = unit
         self.svg_args = {}
+        self._auto_view_box = bool(auto_view_box) or origin_auto
+        self._auto_view_box_updates_size = True
+        self.view_box_margin = view_box_margin
         self._cached_context = None
         self._cached_extra_prepost_with_context = None
+
+        compact_keys = {
+            k: k.lower().replace('_', '').replace('-', '')
+            for k in svg_args
+        }
+        auto_keys = set()
+        for k, compact_key in compact_keys.items():
+            if compact_key in ('autoviewbox', 'fitviewbox'):
+                self._auto_view_box = bool(svg_args[k])
+                auto_keys.add(k)
+            elif compact_key == 'viewbox' and str(
+                    svg_args[k]).strip().lower() == 'auto':
+                self._auto_view_box = True
+                auto_keys.add(k)
+        if self._auto_view_box:
+            for k, compact_key in compact_keys.items():
+                if compact_key in (
+                        'viewboxmargin', 'viewboxpadding', 'margin',
+                        'padding'):
+                    self.view_box_margin = svg_args[k]
+                    auto_keys.add(k)
         for k, v in svg_args.items():
+            if k in auto_keys:
+                continue
+            if compact_keys[k] == 'viewbox':
+                k = 'viewBox'
             k = k.replace('__', ':')
             k = k.replace('_', '-')
             if k[-1] == '-':
                 k = k[:-1]
             self.svg_args[k] = v
+        if self._auto_view_box and 'viewBox' in self.svg_args:
+            raise ValueError(
+                    'auto_view_box cannot be combined with a manual viewBox')
     def set_render_size(self, w=None, h=None):
         self.render_width = w
         self.render_height = h
@@ -106,6 +147,8 @@ class Drawing:
         self.pixel_scale = s
         return self
     def calc_render_size(self):
+        if self._auto_view_box:
+            self._update_auto_view_box()
         if self.render_width is None and self.render_height is None:
             return (self.width * self.pixel_scale,
                     self.height * self.pixel_scale)
@@ -117,6 +160,91 @@ class Drawing:
             return self.render_width, self.height * s
         else:
             return self.render_width, self.render_height
+    def _geometry_elements(self):
+        elements = list(self.elements)
+        for z in sorted(self.ordered_elements):
+            elements.extend(self.ordered_elements[z])
+        return elements
+    def calc_geometry_bounds(self, margin=0):
+        '''Return tight bounds around the drawing's geometry.
+
+        Raises:
+            ValueError: If the drawing contains no supported geometry.
+            NotImplementedError: If it contains an unsupported visible element.
+        '''
+        bounds = geometry.drawing_bounds(self._geometry_elements())
+        if bounds is None:
+            raise ValueError(
+                    'cannot calculate automatic viewBox: drawing contains no '
+                    'supported geometry')
+        return bounds.expanded(margin)
+    def calc_view_box(self, margin=0):
+        '''Return `(x, y, width, height)` tight around the drawing's geometry.
+        '''
+        return self.calc_geometry_bounds(margin).as_view_box()
+    calc_viewbox = calc_view_box
+    compute_view_box = calc_view_box
+    compute_viewbox = calc_view_box
+    def _update_auto_view_box(self):
+        bounds = self.calc_geometry_bounds(self.view_box_margin)
+        self.view_box = bounds.as_view_box()
+        self.svg_args.pop('viewBox', None)
+        if self._auto_view_box_updates_size:
+            self.width = bounds.width
+            self.height = bounds.height
+        return self
+    def auto_view_box(self, margin=None, *, padding=None, update_size=True):
+        '''Recalculate `view_box` from geometry now and before SVG output.
+
+        Args:
+            margin: Uniform margin to add around each edge.  If omitted, the
+                current `view_box_margin` is used.
+            padding: Alias for `margin`.
+            update_size: If True (the default), also set `width` and `height`
+                to the calculated viewBox size.
+        '''
+        if padding is not None:
+            if margin is not None and margin != padding:
+                raise ValueError('specify only one of margin and padding')
+            margin = padding
+        self._auto_view_box = True
+        self._auto_view_box_updates_size = update_size
+        if margin is not None:
+            self.view_box_margin = margin
+        return self._update_auto_view_box()
+    auto_viewbox = auto_view_box
+    fit_view_box = auto_view_box
+    fit_viewbox = auto_view_box
+    fit_to_content = auto_view_box
+    update_view_box = auto_view_box
+    set_view_box_to_content = auto_view_box
+    def set_view_box(self, view_box='auto', *coordinates, margin=None):
+        '''Set a manual viewBox, or use `'auto'`/`None` to fit the geometry.'''
+        if coordinates:
+            view_box = (view_box,) + coordinates
+        if view_box is None or (
+                isinstance(view_box, str)
+                and view_box.strip().lower() == 'auto'):
+            return self.auto_view_box(margin=margin)
+        self._auto_view_box = False
+        try:
+            values = tuple(view_box)
+        except TypeError as e:
+            raise ValueError('view_box must contain four numbers') from e
+        if len(values) != 4:
+            raise ValueError('view_box must contain four numbers')
+        self.view_box = values
+        self.svg_args.pop('viewBox', None)
+        return self
+    set_viewbox = set_view_box
+    @property
+    def viewbox(self):
+        return self.view_box
+    @viewbox.setter
+    def viewbox(self, value):
+        self._auto_view_box = False
+        self.view_box = value
+        self.svg_args.pop('viewBox', None)
     def draw(self, obj, *, z=None, **kwargs):
         '''Add any object that knows how to draw itself to the drawing.
 
@@ -256,6 +384,8 @@ class Drawing:
                 return f.getvalue()
         if context is None:
             context = self.context
+        if self._auto_view_box:
+            self._update_auto_view_box()
         output_file.write(header)
         img_width, img_height = self.calc_render_size()
         if self.unit:

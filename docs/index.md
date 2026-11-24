@@ -22,6 +22,22 @@ It is recommended to use a unique `id_prefix` for each svg if you embed multiple
 d = dw.Drawing(400, 300, id_prefix='pic')
 ```
 
+To fit the canvas around the drawing geometry, call `auto_view_box()`.  The
+optional `margin` (or `padding`) adds the same amount of space on all sides.
+Curves and arcs are measured across their full extent, including any nested
+group transforms.
+
+```python
+d = dw.Drawing(1, 1)
+d.append(dw.Circle(20, -10, 5))
+d.auto_view_box(margin=2)
+assert d.view_box == (13, -17, 14, 14)
+```
+
+Manual viewBox values passed to `Drawing(..., viewBox='x y width height')` are
+unchanged.  With no supported geometry, automatic calculation raises
+`ValueError`.
+
 
 ## Basic Shapes
 
