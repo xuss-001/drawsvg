@@ -320,15 +320,18 @@ class DrawingBasicElement(DrawingElement):
         self.children.extend(animate_iterable)
     def append_title(self, text, **kwargs):
         self.children.append(elements.Title(text, **kwargs))
-    def add_key_frame(self, time, animation_args=None, **attr_values):
+    def add_key_frame(self, time, animation_args=None, easing=None,
+                      **attr_values):
         self._cached_extra_children_with_context = None
         self.animation_data.add_key_frame(
-                time, animation_args=animation_args, **attr_values)
+                time, animation_args=animation_args, easing=easing,
+                **attr_values)
     def add_attribute_key_sequence(self, attr, times, values, *,
-                                   animation_args=None):
+                                   animation_args=None, easings=None):
         self._cached_extra_children_with_context = None
         self.animation_data.add_attribute_key_sequence(
-                attr, times, values, animation_args=animation_args)
+                attr, times, values, animation_args=animation_args,
+                easings=easings)
 
 
 class DrawingParentElement(DrawingBasicElement):

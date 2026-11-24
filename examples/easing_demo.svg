@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="640" height="220" viewBox="0 0 640 220">
+<defs>
+</defs>
+<text x="10" y="44" font-size="12" fill="#222222">linear (default)</text>
+<path d="M250,40 L600,40" stroke="#dddddd" stroke-width="2" />
+<circle cx="250" cy="40" r="7" fill="#888888">
+<animate attributeName="cx" dur="4s" values="250;600" keyTimes="0;1" repeatCount="indefinite" fill="freeze" />
+</circle>
+<text x="10" y="84" font-size="12" fill="#222222">discrete hold</text>
+<path d="M250,80 L600,80" stroke="#dddddd" stroke-width="2" />
+<circle cx="250" cy="80" r="7" fill="#d1495b">
+<animate attributeName="cx" dur="4s" values="250;600" keyTimes="0;1" repeatCount="indefinite" fill="freeze" calcMode="discrete" />
+</circle>
+<text x="10" y="124" font-size="12" fill="#222222">asymmetric bezier</text>
+<path d="M250,120 L600,120" stroke="#dddddd" stroke-width="2" />
+<circle cx="250" cy="120" r="7" fill="#2e86ab">
+<animate attributeName="cx" dur="4s" values="250;600" keyTimes="0;1" repeatCount="indefinite" fill="freeze" calcMode="spline" keySplines="0.1 0.8 0.9 0.2" />
+</circle>
+<text x="10" y="164" font-size="12" fill="#222222">horizontal end tangents (ease-in-out)</text>
+<path d="M250,160 L600,160" stroke="#dddddd" stroke-width="2" />
+<circle cx="250" cy="160" r="7" fill="#3a7d44">
+<animate attributeName="cx" dur="4s" values="250;600" keyTimes="0;1" repeatCount="indefinite" fill="freeze" calcMode="spline" keySplines="0.42 0 0.58 1" />
+</circle>
+<text x="10" y="204" font-size="12" fill="#222222">mixed linear / discrete / bezier</text>
+<path d="M250,200 L600,200" stroke="#dddddd" stroke-width="2" />
+<circle cx="250" cy="200" r="7" fill="#8338ec">
+<animate attributeName="cx" dur="1s" values="250;360" keyTimes="0;1" repeatCount="1" fill="freeze" calcMode="linear" />
+<animate attributeName="cx" dur="1s" begin="1s" values="360;470" keyTimes="0;1" repeatCount="1" fill="freeze" calcMode="discrete" />
+<animate attributeName="cx" dur="2s" begin="2s" values="470;600" keyTimes="0;1" repeatCount="1" fill="freeze" calcMode="spline" keySplines="0.25 0.1 0.25 1" />
+</circle>
+</svg>

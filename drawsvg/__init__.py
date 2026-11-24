@@ -92,6 +92,19 @@ from .native_animation import (
     animate_element_sequence,
     animate_text_sequence,
 )
+from .native_animation.easing import (
+    Easing,
+    LinearEasing,
+    DiscreteEasing,
+    CubicBezierEasing,
+    LINEAR,
+    DISCRETE,
+    EASE,
+    EASE_IN,
+    EASE_OUT,
+    EASE_IN_OUT,
+    parse_easing,
+)
 from .url_encode import (
     bytes_as_data_uri,
     svg_as_data_uri,
