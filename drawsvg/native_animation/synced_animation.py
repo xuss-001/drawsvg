@@ -1,11 +1,233 @@
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import dataclasses
+import math
 from collections import defaultdict
 from numbers import Number
 
 from .. import elements, types
 from . import playback_control_ui, playback_control_js
+
+
+LINEAR_EASING = 'linear'
+DISCRETE_EASING = 'discrete'
+
+
+@dataclasses.dataclass(frozen=True, init=False)
+class CubicBezierEasing:
+    '''Cubic Bezier animation timing.
+
+    The curve starts at (0, 0) and ends at (1, 1).  The x coordinate is the
+    normalized time and the y coordinate is the normalized attribute change.
+    Both control point x coordinates must be in the inclusive range [0, 1].
+    '''
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+
+    def __init__(self, x1, y1=None, x2=None, y2=None):
+        if x2 is None and y2 is None and y1 is not None:
+            pairs = (x1, y1)
+            if not all(
+                    isinstance(v, (tuple, list)) and len(v) == 2
+                    for v in pairs):
+                raise ValueError(
+                        'cubic Bezier easing requires four values '
+                        '(x1, y1, x2, y2)')
+            (x1, y1), (x2, y2) = pairs
+        elif y1 is None and x2 is None and y2 is None:
+            try:
+                values = list(x1)
+            except TypeError:
+                raise ValueError(
+                        'cubic Bezier easing requires four values '
+                        '(x1, y1, x2, y2)') from None
+            if len(values) == 2 and all(
+                    isinstance(v, (tuple, list)) and len(v) == 2
+                    for v in values):
+                (x1, y1), (x2, y2) = values
+            elif len(values) == 4:
+                x1, y1, x2, y2 = values
+            else:
+                raise ValueError(
+                        'cubic Bezier easing requires four values '
+                        '(x1, y1, x2, y2)')
+        elif y1 is None or x2 is None or y2 is None:
+            raise ValueError(
+                    'cubic Bezier easing requires four values '
+                    '(x1, y1, x2, y2)')
+        object.__setattr__(self, 'x1', x1)
+        object.__setattr__(self, 'y1', y1)
+        object.__setattr__(self, 'x2', x2)
+        object.__setattr__(self, 'y2', y2)
+        self.__post_init__()
+
+    def __post_init__(self):
+        values = (self.x1, self.y1, self.x2, self.y2)
+        if any(isinstance(v, bool) or not isinstance(v, Number)
+               or not math.isfinite(v) for v in values):
+            raise ValueError(
+                    'cubic Bezier control points must be finite numbers')
+        if not 0 <= self.x1 <= 1 or not 0 <= self.x2 <= 1:
+            raise ValueError(
+                    'cubic Bezier control point x coordinates must be '
+                    'between 0 and 1')
+        object.__setattr__(self, 'x1', float(self.x1))
+        object.__setattr__(self, 'y1', float(self.y1))
+        object.__setattr__(self, 'x2', float(self.x2))
+        object.__setattr__(self, 'y2', float(self.y2))
+
+    @classmethod
+    def from_values(cls, values):
+        return cls(values)
+
+    @property
+    def key_spline(self):
+        return ' '.join(
+                _format_number(v) for v in (self.x1, self.y1, self.x2, self.y2))
+
+    @property
+    def control_points(self):
+        return ((self.x1, self.y1), (self.x2, self.y2))
+
+    def progress(self, fraction):
+        '''Return the eased progress for a time fraction in [0, 1].
+
+        Bisection is used instead of Newton iteration because it remains stable
+        for every valid curve, including curves with horizontal endpoint
+        tangents.
+        '''
+        fraction = float(fraction)
+        if fraction <= 0:
+            return 0.0
+        if fraction >= 1:
+            return 1.0
+        low, high = 0.0, 1.0
+        for _ in range(64):
+            t = (low + high) / 2
+            x = _cubic_bezier_coordinate(t, self.x1, self.x2)
+            if x < fraction:
+                low = t
+            else:
+                high = t
+        t = (low + high) / 2
+        return _cubic_bezier_coordinate(t, self.y1, self.y2)
+
+    def __call__(self, fraction):
+        return self.progress(fraction)
+
+
+CubicBezier = CubicBezierEasing
+
+
+def _format_number(value):
+    return format(float(value), '.12g')
+
+
+def _cubic_bezier_coordinate(t, p1, p2):
+    one_minus_t = 1 - t
+    return (
+            3 * one_minus_t * one_minus_t * t * p1
+            + 3 * one_minus_t * t * t * p2
+            + t * t * t)
+
+
+def _looks_like_single_easing(value):
+    if value is None or isinstance(value, (str, CubicBezierEasing, dict)):
+        return True
+    try:
+        values = list(value)
+    except TypeError:
+        return False
+    if len(values) == 4 and all(
+            isinstance(v, Number) and not isinstance(v, bool) for v in values):
+        return True
+    if len(values) == 2 and all(
+            isinstance(v, (tuple, list)) and len(v) == 2 for v in values):
+        return True
+    return False
+
+
+def _parse_float(value, description):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f'{description} must be a number') from None
+    if not math.isfinite(value):
+        raise ValueError(f'{description} must be finite')
+    return value
+
+
+def normalize_easing(easing):
+    '''Convert a user-specified easing into a timeline easing value.
+
+    Returns None for unspecified (linear) easing, the string 'linear' for
+    explicitly linear easing, the string 'discrete' for step/hold easing, or a
+    CubicBezierEasing instance.
+    '''
+    if easing is None or isinstance(easing, CubicBezierEasing):
+        return easing
+    if isinstance(easing, dict):
+        try:
+            values = (easing['x1'], easing['y1'],
+                      easing['x2'], easing['y2'])
+        except KeyError:
+            raise ValueError(
+                    'cubic Bezier easing mapping requires x1, y1, x2, and y2'
+                    ) from None
+        return CubicBezierEasing.from_values(values)
+    if isinstance(easing, str):
+        value = easing.strip().lower().replace('_', '-')
+        if value in ('linear', 'default'):
+            return LINEAR_EASING
+        if value in ('discrete', 'hold', 'step', 'step-end'):
+            return DISCRETE_EASING
+        named_curves = {
+            'ease': (0.25, 0.1, 0.25, 1),
+            'ease-in': (0.42, 0, 1, 1),
+            'ease-out': (0, 0, 0.58, 1),
+            'ease-in-out': (0.42, 0, 0.58, 1),
+        }
+        if value in named_curves:
+            return CubicBezierEasing(*named_curves[value])
+        if value.startswith('cubic-bezier(') and value.endswith(')'):
+            value = value[len('cubic-bezier('):-1]
+        values = value.replace(',', ' ').split()
+        if len(values) == 4:
+            return CubicBezierEasing.from_values(
+                    [_parse_float(v, 'cubic Bezier control point')
+                     for v in values])
+        raise ValueError(
+                "easing must be 'linear', 'discrete', or a cubic Bezier "
+                "specified as (x1, y1, x2, y2)")
+    try:
+        values = list(easing)
+    except TypeError:
+        raise ValueError(
+                "easing must be 'linear', 'discrete', or a cubic Bezier "
+                "specified as (x1, y1, x2, y2)") from None
+    return CubicBezierEasing.from_values(values)
+
+
+def _normalize_easings(easings, interval_count):
+    if interval_count < 0:
+        raise ValueError('interval count cannot be negative')
+    if easings is None:
+        return [None] * interval_count
+    if _looks_like_single_easing(easings):
+        if interval_count == 0:
+            raise ValueError(
+                    'easing was provided, but there are no key frame '
+                    'intervals to apply it to')
+        easing = normalize_easing(easings)
+        return [easing] * interval_count
+    easings = list(easings)
+    if len(easings) != interval_count:
+        raise ValueError(
+                f'expected {interval_count} easing values for '
+                f'{interval_count} key frame intervals, got {len(easings)}')
+    return [normalize_easing(easing) for easing in easings]
 
 
 @dataclasses.dataclass
@@ -110,28 +332,65 @@ class AnimatedAttributeTimeline:
     animate_attrs: Optional[Dict[str, Any]] = None
     times: List[float] = dataclasses.field(default_factory=list)
     values: List[Any] = dataclasses.field(default_factory=list)
+    easings: List[Any] = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
         self.name = types.normalize_attribute_name(self.name)
+        self.times = list(self.times)
+        self.values = list(self.values)
+        self._pending_easing = None
+        self.easings = [normalize_easing(easing)
+                        for easing in self.easings]
+        expected_easings = max(0, len(self.times) - 1)
+        if not self.easings and expected_easings:
+            self.easings = [None] * expected_easings
+        if len(self.easings) != expected_easings:
+            raise ValueError(
+                    f'expected {expected_easings} easing values for '
+                    f'{expected_easings} key frame intervals, '
+                    f'got {len(self.easings)}')
 
-    def append(self, time, value):
+    def append(self, time, value, easing=None):
         if self.times and time < self.times[-1]:
             raise ValueError('out-of-order key frame times')
+        has_preceding_keyframe = bool(self.times)
+        easing = normalize_easing(easing)
+        if has_preceding_keyframe:
+            if self._pending_easing is not None:
+                interval_easing = self._pending_easing
+                self._pending_easing = easing
+            else:
+                interval_easing = easing
+        else:
+            if easing not in (None, LINEAR_EASING):
+                self._pending_easing = easing
+            interval_easing = None
         self.times.append(time)
         self.values.append(value)
+        if has_preceding_keyframe:
+            self.easings.append(interval_easing)
 
-    def extend(self, times, values):
+    def extend(self, times, values, easings=None, *, easing=None):
+        if easing is not None and easings is not None:
+            raise ValueError('specify either easing or easings, not both')
+        if easing is not None:
+            easings = easing
         if len(times) != len(values):
             raise ValueError('times and values lists are mismatched lengths')
         if len(self.times) and len(times) and times[0] < self.times[-1]:
             raise ValueError('out-of-order key frame times')
         if list(times) != sorted(times):
             raise ValueError('out-of-order key frame times')
+        interval_count = len(times) - (0 if self.times else 1)
+        interval_count = max(0, interval_count)
+        new_easings = _normalize_easings(easings, interval_count)
         self.times.extend(times)
         self.values.extend(values)
+        self.easings.extend(new_easings)
 
     def interpolate_at_time(self, at_time):
-        return linear_interpolate_value(self.times, self.values, at_time)
+        return interpolate_value(
+                self.times, self.values, self.easings, at_time)
 
     def as_animate_element(self, config: Optional[SyncedAnimationConfig]=None):
         if config is not None:
@@ -148,6 +407,23 @@ class AnimatedAttributeTimeline:
         dur_str = f'{total_duration}s'
         values = self.values
         times = self.times
+        has_easing = any(easing is not None for easing in self.easings)
+        if has_easing:
+            values, key_times, key_splines, calc_mode = (
+                    self._expanded_eased_keyframes(
+                        times, values, self.easings, total_duration,
+                        start_delay))
+            attrs = dict(
+                    dur=dur_str,
+                    values=';'.join(map(str, values)),
+                    keyTimes=';'.join(key_times),
+                    repeatCount=repeat_count,
+                    fill=fill,
+                    calcMode=calc_mode)
+            if key_splines is not None:
+                attrs['keySplines'] = ';'.join(key_splines)
+            attrs.update(self.animate_attrs or {})
+            return elements.Animate(self.name, **attrs)
         key_times = ';'.join(
             str(max(0, min(1, round(
                     (start_delay + t) / total_duration, 3))))
@@ -170,28 +446,78 @@ class AnimatedAttributeTimeline:
         anim = elements.Animate(self.name, **attrs)
         return anim
 
+    def _expanded_eased_keyframes(self, times, values, easings,
+                                  total_duration, start_delay):
+        def normalized_time(time):
+            return max(0.0, min(1.0, (start_delay + time) / total_duration))
+
+        if all(easing == DISCRETE_EASING for easing in easings):
+            key_times = []
+            key_values = []
+            for time, value in zip(times, values):
+                key_times.append(_format_number(normalized_time(time)))
+                key_values.append(value)
+            if not key_times or float(key_times[0]) != 0:
+                key_times.insert(0, '0')
+                key_values.insert(0, values[0])
+            if float(key_times[-1]) != 1:
+                key_times.append('1')
+                key_values.append(values[-1])
+            return key_values, key_times, None, 'discrete'
+
+        linear_spline = '0 0 1 1'
+        first_time = normalized_time(times[0])
+        keys = []
+        if first_time > 0:
+            keys.append((0.0, values[0], None))
+            keys.append((first_time, values[0], linear_spline))
+        else:
+            keys.append((0.0, values[0], None))
+        for i, easing in enumerate(easings):
+            end_time = normalized_time(times[i+1])
+            if easing == DISCRETE_EASING:
+                keys.append((end_time, values[i], linear_spline))
+                keys.append((end_time, values[i+1], linear_spline))
+            else:
+                spline = (easing.key_spline
+                          if isinstance(easing, CubicBezierEasing)
+                          else linear_spline)
+                keys.append((end_time, values[i+1], spline))
+        if keys[-1][0] < 1:
+            keys.append((1.0, values[-1], linear_spline))
+        key_times = [_format_number(k[0]) for k in keys]
+        key_values = [k[1] for k in keys]
+        key_splines = [k[2] for k in keys[1:]]
+        return key_values, key_times, key_splines, 'spline'
+
 
 class AnimationHelperData:
     def __init__(self):
         self.attr_timelines = {}
 
-    def add_key_frame(self, time, animation_args=None, **attr_values):
+    def add_key_frame(self, time, animation_args=None, easing=None,
+                      **attr_values):
         for attr, val in attr_values.items():
             attr = types.normalize_attribute_name(attr)
             timeline = self.attr_timelines.get(attr)
             if timeline is None:
                 timeline = AnimatedAttributeTimeline(attr, animation_args)
                 self.attr_timelines[attr] = timeline
-            timeline.append(time, val)
+            timeline.append(time, val, easing=easing)
 
     def add_attribute_key_sequence(self, attr, times, values, *,
-                                   animation_args=None):
+                                   animation_args=None, easing=None,
+                                   easings=None):
+        if easing is not None and easings is not None:
+            raise ValueError('specify either easing or easings, not both')
+        if easings is not None:
+            easing = easings
         attr = types.normalize_attribute_name(attr)
         timeline = self.attr_timelines.get(attr)
         if timeline is None:
             timeline = AnimatedAttributeTimeline(attr, animation_args)
             self.attr_timelines[attr] = timeline
-        timeline.extend(times, values)
+        timeline.extend(times, values, easings=easing)
 
     def interpolate_at_time(self, at_time):
         return {
@@ -207,7 +533,8 @@ class AnimationHelperData:
                 if name != 'y' and lcontext.context.is_attr_inverted(name):
                     inv_timeline = AnimatedAttributeTimeline(
                             timeline.name, timeline.animate_attrs,
-                            timeline.times, [-v for v in timeline.values])
+                            timeline.times, [-v for v in timeline.values],
+                            timeline.easings)
                     all_timelines[name] = inv_timeline
             # Invert -y - height
             y_attrs = None
@@ -230,12 +557,37 @@ class AnimationHelperData:
                 ytimes = [0]
                 yvalues = [lcontext.element.args.get('y', 0)]
             if y_timeline is not None or height_timeline is not None:
+                y_value_count = len(yvalues)
+                height_value_count = len(hvalues)
+                if y_timeline is None:
+                    y_interpolate = linear_interpolate_value
+                else:
+                    y_interpolate = (
+                            lambda times, values, at_time:
+                            y_timeline.interpolate_at_time(at_time))
+                if height_timeline is None:
+                    height_interpolate = linear_interpolate_value
+                else:
+                    height_interpolate = (
+                            lambda times, values, at_time:
+                            height_timeline.interpolate_at_time(at_time))
                 ytimes, yvalues = _merge_timeline_inverted_y_values(
                         ytimes, yvalues, htimes, hvalues,
-                        linear_interpolate_value, linear_interpolate_value)
+                        y_interpolate, height_interpolate)
                 if ytimes is not None:
+                    if len(ytimes) <= 1:
+                        merged_easings = []
+                    elif height_timeline is None or height_value_count == 1:
+                        merged_easings = list(y_timeline.easings)
+                    elif y_timeline is None or y_value_count == 1:
+                        merged_easings = list(height_timeline.easings)
+                    elif (ytimes == htimes
+                          and y_timeline.easings == height_timeline.easings):
+                        merged_easings = list(y_timeline.easings)
+                    else:
+                        merged_easings = [None] * (len(ytimes) - 1)
                     y_timeline = AnimatedAttributeTimeline(
-                            'y', y_attrs, ytimes, yvalues)
+                            'y', y_attrs, ytimes, yvalues, merged_easings)
                     all_timelines['y'] = y_timeline
         return all_timelines
 
@@ -252,7 +604,7 @@ class AnimationHelperData:
         ]
 
 
-def linear_interpolate_value(times, values, at_time):
+def interpolate_value(times, values, easings, at_time):
     if len(times) == 0:
         return 0
     idx = sum(t <= at_time for t in times)
@@ -264,9 +616,19 @@ def linear_interpolate_value(times, values, at_time):
         return values[idx-1]
     elif isinstance(values[idx], Number) and isinstance(values[idx-1], Number):
         fraction = (at_time-times[idx-1]) / (times[idx]-times[idx-1])
+        easing = easings[idx-1] if idx-1 < len(easings) else None
+        if easing == DISCRETE_EASING:
+            return values[idx-1]
+        if isinstance(easing, CubicBezierEasing):
+            fraction = easing.progress(fraction)
         return values[idx-1] * (1-fraction) + (values[idx] * fraction)
     else:
         return values[idx-1]
+
+
+def linear_interpolate_value(times, values, at_time):
+    return interpolate_value(times, values, (), at_time)
+
 
 def _merge_timeline_inverted_y_values(ytimes, yvalues, htimes, hvalues,
                                       yinterpolate, hinterpolate):

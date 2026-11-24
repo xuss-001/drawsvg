@@ -23,6 +23,34 @@ d = dw.Drawing(400, 300, id_prefix='pic')
 ```
 
 
+## Native Animation Easing
+
+`add_attribute_key_sequence()` accepts one easing per adjacent key frame
+interval.  `add_key_frame()` accepts the easing for the interval ending at that
+new key frame; easing on the first key frame applies to the interval starting
+there.  Supported values are `'linear'`, `'discrete'`, and cubic Bezier control
+points `(x1, y1, x2, y2)` or a `CubicBezierEasing` object.  A single easing
+value is applied to every interval.
+
+```python
+d = dw.Drawing(100, 100, animation_config=dw.SyncedAnimationConfig(
+    duration=3))
+r = dw.Rectangle(0, 0, 10, 10)
+r.add_attribute_key_sequence(
+    'x', [0, 1, 2, 3], [0, 30, 30, 80],
+    easing=['linear', 'discrete', (0.42, 0, 0.58, 1)])
+d.append(r)
+
+assert r.interpolate_at_time(0.5)['x'] == 15
+assert r.interpolate_at_time(1.5)['x'] == 30
+```
+
+The x coordinates of cubic Bezier control points must be in `[0, 1]`; the y
+coordinates control progress and may overshoot.  Omitting easing keeps linear
+interpolation.  If adjacent key frames share a timestamp, the final value at
+that timestamp wins and the zero-duration interval has no visible effect.
+
+
 ## Basic Shapes
 
 ### One Line

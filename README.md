@@ -152,6 +152,60 @@ Download the above SVG and open it in a web browser to try.
 
 https://user-images.githubusercontent.com/2476062/221400434-1529d237-e9bf-4363-a143-0ece75cd349a.mp4
 
+### Key frame easing
+Each interval between adjacent numeric key frames can use linear interpolation,
+discrete holding, or a cubic Bezier timing curve.  The easing list has one item
+per interval (one fewer item than the number of key frames).  A single easing
+value is applied to every interval:
+
+```python
+import drawsvg as draw
+
+d = draw.Drawing(
+    100, 100,
+    animation_config=draw.SyncedAnimationConfig(duration=3))
+r = draw.Rectangle(0, 0, 20, 20)
+r.add_attribute_key_sequence(
+    'x',
+    [0, 1, 2, 3],
+    [0, 30, 30, 80],
+    easing=[
+        'linear',
+        'discrete',
+        (0.42, 0, 0.58, 1),  # cubic-bezier(x1, y1, x2, y2)
+    ],
+)
+d.append(r)
+
+# The same interpolation is used by SVG export and by Python freeze frames.
+print(r.interpolate_at_time(0.5)['x'])  # 15
+print(r.interpolate_at_time(1.5)['x'])  # 30 (holds the preceding value)
+print(r.interpolate_at_time(2.5)['x'])  # eased value from 30 to 80
+d.save_svg('eased-animation.svg')
+```
+
+For incremental key frames, easing belongs to the interval ending at the new
+key frame.  An easing passed with the first key frame applies to the interval
+starting there:
+
+```python
+r = draw.Rectangle(0, 0, 20, 20)
+r.add_key_frame(0, x=0)
+r.add_key_frame(1, x=30, easing='linear')
+r.add_key_frame(2, x=30, easing='discrete')
+r.add_key_frame(3, x=80, easing='cubic-bezier(0.42, 0, 0.58, 1)')
+```
+
+Bezier x coordinates are normalized time and must both be between 0 and 1.
+The y coordinates control attribute progress and may overshoot.  `y1=0` and
+`y2=1` give horizontal tangents at the start and end of the interval.  If an
+easing is omitted, the existing linear behavior is preserved.
+
+If adjacent key frames have the same time, the last value at that timestamp
+wins at the instant itself; zero-duration intervals do not affect intermediate
+times.  An easing count that does not match the number of intervals, or an
+invalid control point, raises `ValueError` when the key frames are added.
+
 ### Patterns and gradients
 ```python
 import drawsvg as draw

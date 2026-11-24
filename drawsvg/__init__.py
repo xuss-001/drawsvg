@@ -89,6 +89,11 @@ from .frame_animation import (
 )
 from .native_animation import (
     SyncedAnimationConfig,
+    AnimatedAttributeTimeline,
+    CubicBezierEasing,
+    CubicBezier,
+    LINEAR_EASING,
+    DISCRETE_EASING,
     animate_element_sequence,
     animate_text_sequence,
 )
