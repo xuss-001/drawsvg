@@ -49,7 +49,14 @@ class Drawing:
             unit: Any supported SVG unit, such as 'px' or 'mm', to be used in the `width` and
                 `height` attributes of the `<svg>` tag.  All position and size values in this
                 drawing will be in this unit.
+            fit_view_box: When true, automatically compute a tight viewBox
+                around all supported geometry at SVG output time.  Aliases
+                ``auto_view_box`` and ``fit_to_content`` are accepted.
+            padding: Equal padding added on every side when auto-fitting the
+                viewBox (aliases ``pad`` and ``margin``).
         '''
+        auto_fit_config = self._extract_auto_fit_kwargs(svg_args)
+        self._auto_fit_config = auto_fit_config
         if context is None:
             context = types.Context()
         if animation_config is not None:
@@ -62,7 +69,7 @@ class Drawing:
                 origin = origin.replace('bottom-', 'top-')
             elif context.invert_y and origin.startswith('top-'):
                 origin = origin.replace('top-', 'bottom-')
-            self.view_box = {
+            self._view_box = {
                 'center': (-width/2, -height/2, width, height),
                 'top-left': (0, 0, width, height),
                 'top-right': (-width, 0, width, height),
@@ -75,7 +82,7 @@ class Drawing:
                 raise ValueError(
                         "origin must be the string 'center', 'top-left', ..., "
                         "'bottom-right' or a tuple (x, y)")
-            self.view_box = origin + (width, height)
+            self._view_box = origin + (width, height)
         self.elements = []
         self.ordered_elements = defaultdict(list)
         self.other_defs = []
@@ -117,6 +124,198 @@ class Drawing:
             return self.render_width, self.height * s
         else:
             return self.render_width, self.render_height
+
+    _FIT_FLAG_KWARGS = (
+        'fit_view_box', 'fit_viewbox', 'auto_view_box', 'auto_viewbox',
+        'automatic_view_box', 'fit_to_content', 'fit_content',
+        'autofit', 'auto_fit', 'tight_view_box', 'tight_viewbox',
+        'tight', 'zoom_to_fit', 'crop_to_content', 'auto_crop',
+        'autoscale', 'auto_scale', 'tight_layout', 'auto_fit_viewbox',
+        'set_auto_view_box',
+    )
+    _PADDING_KWARGS = (
+        'padding', 'pad', 'margin', 'view_box_padding', 'border_padding',
+    )
+
+    @classmethod
+    def _extract_auto_fit_kwargs(cls, kwargs):
+        '''Pop auto-fit/padding options from arbitrary SVG keyword args.'''
+        config = None
+        padding = None
+        on_unsupported = kwargs.pop('on_unsupported', None)
+        for name in cls._PADDING_KWARGS:
+            if name in kwargs:
+                value = kwargs.pop(name)
+                if padding is None:
+                    padding = value
+                if config is not None:
+                    config['padding'] = value
+        for name in cls._FIT_FLAG_KWARGS:
+            if name not in kwargs:
+                continue
+            value = kwargs.pop(name)
+            if config is None:
+                config = {}
+            # A numeric flag is shorthand for fit with that padding.
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                if padding is None:
+                    padding = value
+            config['requested'] = bool(value) or (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool))
+        if padding is not None:
+            if config is None:
+                config = {'requested': True}
+            config['padding'] = padding
+        if on_unsupported is not None:
+            if config is None:
+                config = {}
+            config['on_unsupported'] = on_unsupported
+        if config is not None and config.get('requested', True) is False:
+            return None
+        if config is not None:
+            config.setdefault('padding', 0)
+            config.setdefault('on_unsupported', 'raise')
+        return config
+
+    @property
+    def view_box(self):
+        '''The SVG viewBox tuple ``(x, y, width, height)``.
+
+        Assigning the string ``'auto'`` (or ``'fit'``) requests automatic
+        content fitting at output time; any 4-tuple remains a manual viewBox.
+        '''
+        return self._view_box
+
+    @view_box.setter
+    def view_box(self, value):
+        if isinstance(value, str) and value.strip().lower() in (
+                'auto', 'fit', 'content', 'tight', 'fit-to-content'):
+            config = dict(getattr(self, '_auto_fit_config', None) or {})
+            config['requested'] = True
+            config.setdefault('padding', 0)
+            config.setdefault('on_unsupported', 'raise')
+            self._auto_fit_config = config
+            if not hasattr(self, '_view_box'):
+                self._view_box = (0, 0, self.width, self.height)
+            return
+        self._view_box = value
+        # An explicit manual viewBox overrides any constructor auto-fit.
+        self._auto_fit_config = None
+
+    def fit_view_box(self, padding=0, on_unsupported='raise',
+                     apply=True, **padding_aliases):
+        '''Set ``self.view_box`` to tightly fit all supported geometry.
+
+        Curve/arc bulges, relative path commands, closed subpaths and nested
+        Group transforms are fully measured.  ``padding`` adds equal space on
+        every side.  Returns the new ``(x, y, width, height)`` viewBox.
+        '''
+        from . import bounds as bounds_module
+        view_box = bounds_module.drawing_bounds(
+                self, padding, on_unsupported=on_unsupported,
+                **padding_aliases)
+        if apply:
+            self._view_box = view_box
+        return view_box
+
+    def compute_view_box(self, padding=0, on_unsupported='raise',
+                         **padding_aliases):
+        '''Like :meth:`fit_view_box` but does not modify ``self.view_box``.'''
+        from . import bounds as bounds_module
+        return bounds_module.drawing_bounds(
+                self, padding, on_unsupported=on_unsupported,
+                **padding_aliases)
+
+    def get_bounding_box(self, padding=0, on_unsupported='raise'):
+        '''Return the geometry :class:`drawsvg.bounds.BoundingBox` (extents).'''
+        from . import bounds as bounds_module
+        box = bounds_module.geometry_bounds(
+                self, on_unsupported=on_unsupported)
+        if padding:
+            box = box.padded(padding)
+        return box
+
+    def set_view_box(self, *args, fit=None, padding=0,
+                     on_unsupported='raise', **kwargs):
+        '''Set a manual viewBox ``(x, y, w, h)`` or auto-fit the content.
+
+        ``set_view_box()`` with no arguments auto-fits; ``set_view_box(True,
+        padding=...)`` does the same.  Explicit arguments set the viewBox
+        manually and remain fully compatible with earlier drawsvg behavior.
+        '''
+        from . import bounds as bounds_module
+        if fit is True or (not args and fit is not False) or args == ('auto',):
+            view_box = self.fit_view_box(
+                    padding, on_unsupported=on_unsupported, **kwargs)
+            return view_box
+        if len(args) == 1 and isinstance(args[0], (tuple, list)):
+            values = tuple(args[0])
+        elif len(args) == 4:
+            values = args
+        elif args:
+            raise ValueError(
+                    'set_view_box expects (x, y, width, height), a 4-tuple, '
+                    'or no arguments to auto-fit')
+        else:
+            values = None
+        if values is not None:
+            if len(values) != 4:
+                raise ValueError('viewBox must contain exactly 4 values')
+            self.view_box = tuple(values)
+            return bounds_module.ViewBox(*self.view_box)
+        return self.fit_view_box(
+                padding, on_unsupported=on_unsupported, **kwargs)
+
+    # Common alternative names for the same auto-fit operation.
+    auto_view_box = fit_view_box
+    auto_viewbox = fit_view_box
+    auto_adjust_view_box = fit_view_box
+    adjust_viewbox = fit_view_box
+    fit_viewbox = fit_view_box
+    fit_to_bounds = fit_view_box
+    autofit = fit_view_box
+    auto_fit = fit_view_box
+    fit = fit_view_box
+    fit_to_content = fit_view_box
+    fit_content = fit_view_box
+    adjust_view_box = fit_view_box
+    set_view_box_to_content = fit_view_box
+    set_view_box_to_fit = fit_view_box
+    zoom_to_fit = fit_view_box
+    crop_to_content = fit_view_box
+    tight_view_box = fit_view_box
+    calc_view_box = compute_view_box
+    calculate_view_box = compute_view_box
+    get_content_bounds = get_bounding_box
+    get_bounds = get_bounding_box
+    content_bounds = get_bounding_box
+    bounding_box = get_bounding_box
+    get_bbox = get_bounding_box
+    get_viewbox_bounds = get_bounding_box
+    get_view_box_bounds = get_bounding_box
+    get_content_box = get_bounding_box
+    extents = get_bounding_box
+
+    # camelCase aliases (older drawsvg naming convention).
+    fitViewBox = fit_view_box
+    autoViewBox = fit_view_box
+    setViewBox = set_view_box
+    getBoundingBox = get_bounding_box
+    getBounds = get_bounding_box
+    setAutoViewBox = fit_view_box
+    autoSetViewBox = fit_view_box
+    auto_scale = fit_view_box
+    autoscale = fit_view_box
+    tight_layout = fit_view_box
+    trim = fit_view_box
+    set_auto_view_box = fit_view_box
+    view_box_bounds = compute_view_box
+    get_view_box = compute_view_box
+    measure = get_bounding_box
+    calc_viewbox = compute_view_box
+    get_viewbox = compute_view_box
+
     def draw(self, obj, *, z=None, **kwargs):
         '''Add any object that knows how to draw itself to the drawing.
 
@@ -247,7 +446,20 @@ class Drawing:
             context = self.context
         return list(context.extra_javascript(self)) + self.js_list
     def as_svg(self, output_file=None, randomize_ids=False, header=XML_HEADER,
-               skip_js=False, skip_css=False, context=None):
+               skip_js=False, skip_css=False, context=None, **fit_options):
+        if fit_options:
+            call_config = self._extract_auto_fit_kwargs(fit_options)
+            if fit_options:
+                raise TypeError(
+                        'Unexpected as_svg() keyword arguments: {}'.format(
+                                ', '.join(fit_options)))
+        else:
+            call_config = None
+        fit_config = call_config or self._auto_fit_config
+        if fit_config is not None and fit_config.get('requested', True):
+            self.fit_view_box(
+                    fit_config.get('padding', 0),
+                    on_unsupported=fit_config.get('on_unsupported', 'raise'))
         if output_file is None:
             with StringIO() as f:
                 self.as_svg(
@@ -360,15 +572,25 @@ svg {{
         return (random.choice(string.ascii_letters)
                 + ''.join(random.choices(
                     string.ascii_letters+string.digits, k=length-1)))
-    def save_svg(self, fname, encoding='utf-8', context=None):
+    def save_svg(self, fname, encoding='utf-8', context=None, **fit_options):
         with open(fname, 'w', encoding=encoding) as f:
-            self.as_svg(output_file=f, context=context)
+            self.as_svg(output_file=f, context=context, **fit_options)
     def save_html(self, fname, title=None, encoding='utf-8', context=None):
         with open(fname, 'w', encoding=encoding) as f:
             self.as_html(output_file=f, title=title, context=context)
-    def save_png(self, fname, context=None):
-        self.rasterize(to_file=fname, context=context)
-    def rasterize(self, to_file=None, context=None):
+    def save_png(self, fname, context=None, **fit_options):
+        self.rasterize(to_file=fname, context=context, **fit_options)
+    def rasterize(self, to_file=None, context=None, **fit_options):
+        if fit_options:
+            config = self._extract_auto_fit_kwargs(fit_options)
+            if fit_options:
+                raise TypeError(
+                        'Unexpected rasterize() keyword arguments: {}'.format(
+                                ', '.join(fit_options)))
+            if config is not None:
+                self.fit_view_box(
+                        config.get('padding', 0),
+                        on_unsupported=config.get('on_unsupported', 'raise'))
         if to_file is not None:
             return raster.Raster.from_svg_to_file(
                     self.as_svg(context=context), to_file)

@@ -96,6 +96,39 @@ d  # Display as SVG
 
 [![Example output image](https://raw.githubusercontent.com/cduck/drawsvg/master/examples/example1.png)](https://github.com/cduck/drawsvg/blob/master/examples/example1.svg)
 
+### Auto-fit the viewBox to the drawing
+For thumbnails you can let drawsvg compute a tight viewBox instead of
+calculating coordinates by hand.  `fit_view_box(padding=...)` measures
+rectangles, circles, ellipses, lines/polylines and paths (including relative
+commands, closed subpaths, quadratic/cubic Beziers and elliptical arcs),
+applying every nested group's 2D affine transform.  Curve/arc extrema are
+solved exactly, so mid-curve bulges and rotated/reflected geometry are never
+clipped.  Strokes, text, filters and external resources are not measured; any
+other visible element raises `draw.UnsupportedElementError` by default (pass
+`on_unsupported='warn'` or `'ignore'` to skip it).  An empty drawing raises
+`draw.EmptyDrawingError`.
+
+```python
+d = draw.Drawing(200, 200)
+g = draw.Group(transform='translate(60, 40) rotate(25) scale(1.2, -0.8)')
+p = draw.Path()
+p.M(0, 0).C(0, 100, 100, 100, 100, 0).Q(50, -40, 0, 0).Z()
+g.append(p)
+d.append(g)
+
+view_box = d.fit_view_box(padding=20)  # sets d.view_box and returns it
+print(view_box)                        # e.g. (40, -15.2, 155.2, 126.2)
+d.save_svg('thumbnail.svg')
+
+# Equivalent forms:
+draw.fit_view_box(d, padding=20)
+d.auto_view_box(margin=20)
+draw.Drawing(200, 200, fit_view_box=True, padding=20)
+```
+
+See [`examples/auto_viewbox.py`](examples/auto_viewbox.py) for a runnable
+demonstration with a rendered preview.
+
 ### SVG-native animation with playback controls
 ```python
 import drawsvg as draw

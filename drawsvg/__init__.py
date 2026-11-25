@@ -77,6 +77,8 @@ from .types import (
     DrawingParentElement,
 )
 from .elements import *
+from .bounds import *
+from . import bounds
 from .video import (
     render_svg_frames,
     save_video,

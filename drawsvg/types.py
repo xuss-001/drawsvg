@@ -320,6 +320,30 @@ class DrawingBasicElement(DrawingElement):
         self.children.extend(animate_iterable)
     def append_title(self, text, **kwargs):
         self.children.append(elements.Title(text, **kwargs))
+    def get_bounds(self, padding=0, *, on_unsupported='raise',
+                   transform=None):
+        '''Compute this element's tight geometric bounding box.
+
+        Returns a :class:`drawsvg.bounds.BoundingBox` in root/local
+        coordinates.  Nested groups and transforms are handled.  Does not
+        modify the element.
+        '''
+        from . import bounds as bounds_module
+        box = bounds_module.geometry_bounds(
+                self, on_unsupported=on_unsupported, transform=transform)
+        if padding:
+            box = box.padded(padding)
+        return box
+    def get_bounding_box(self, *args, **kwargs):
+        return self.get_bounds(*args, **kwargs)
+    def get_bbox(self, *args, **kwargs):
+        return self.get_bounds(*args, **kwargs)
+    @property
+    def bounds(self):
+        return self.get_bounds()
+    @property
+    def bbox(self):
+        return self.get_bounds()
     def add_key_frame(self, time, animation_args=None, **attr_values):
         self._cached_extra_children_with_context = None
         self.animation_data.add_key_frame(
