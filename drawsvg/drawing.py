@@ -213,6 +213,28 @@ class Drawing:
             else:
                 self.svg_args['onload'] = onload
         self.js_list.append(js_text)
+    def recolor(self, replacements=None, elements=None, *, colors=None,
+                color_map=None, palette=None, selection=None):
+        '''Return a recolored copy that only changes selected elements.
+
+        Color keys are matched by RGB value, so named colors, hex strings, and
+        ``rgb()`` values for the same color produce the same replacement.
+        Selection can be a single element, an element id, or an iterable of
+        elements; groups include their descendants. The original drawing is
+        never modified.
+
+        See :func:`drawsvg.recolor` for details and supported limitations.
+        '''
+        from .recolor import recolor
+        return recolor(
+            self, replacements, elements, colors=colors, color_map=color_map,
+            palette=palette, selection=selection)
+    def replace_colors(self, replacements=None, elements=None, *, colors=None,
+                       color_map=None, palette=None, selection=None):
+        '''Alias for :meth:`recolor`.'''
+        return self.recolor(
+            replacements, elements, colors=colors, color_map=color_map,
+            palette=palette, selection=selection)
     def all_elements(self, context=None):
         '''Return self.elements, self.ordered_elements, and extras as a single
         list.

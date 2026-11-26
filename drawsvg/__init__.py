@@ -70,6 +70,12 @@ Example:
 from .defs import *
 from .raster import Raster
 from .drawing import Drawing
+from .recolor import (
+    RecolorError,
+    UnsupportedExternalResourceError,
+    recolor,
+    replace_colors,
+)
 from .types import (
     Context,
     DrawingElement,

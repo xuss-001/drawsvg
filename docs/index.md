@@ -203,6 +203,56 @@ d.append(dw.Ellipse(250, 50, 30, 45,
 For a full list, see [W3C specifications](https://www.w3.org/TR/SVG11/styling.html).
 
 
+### Recoloring selected elements
+
+```python
+themed = d.recolor(
+    {'red': '#0044cc', 'lime': 'yellow'},
+    elements=[selected_group, selected_shape])
+```
+
+`recolor()` returns a recolored copy and leaves `d` unchanged. Select one
+element, an element id, or a list of elements/groups. Selecting a group
+includes its children, and child colors that override the group are recolored
+independently.
+
+Source colors are matched by RGB value. For example, `red`, `#ff0000`, and
+`rgb(255, 0, 0)` all match the same mapping key. The replacement changes only
+the color; shape geometry, transforms, `opacity`, `fill-opacity`,
+`stroke-opacity`, and alpha embedded in the source color are preserved.
+`none` and `currentColor` are not converted.
+
+Gradient stops are recolored as well. If selected and unselected shapes share
+a gradient, the selected shapes receive private copies of the gradient and its
+`href` chain, so the unselected shapes keep the original colors. Repeated
+`as_svg()` calls on the themed drawing produce the same output.
+
+```python
+d = dw.Drawing(240, 120)
+
+selected = dw.Group(fill='red')
+selected.append(dw.Rectangle(10, 10, 60, 40))  # Inherits red
+selected.append(dw.Rectangle(80, 10, 60, 40, fill='lime'))  # Local override
+keep = dw.Group(fill='red')
+keep.append(dw.Rectangle(160, 10, 60, 40))
+
+gradient = dw.LinearGradient(10, 80, 220, 80)
+gradient.add_stop(0, 'red')
+gradient.add_stop(1, 'lime')
+gradient_selected = dw.Rectangle(10, 70, 100, 40, fill=gradient)
+gradient_keep = dw.Rectangle(130, 70, 100, 40, fill=gradient)
+
+d.extend([selected, keep, gradient_selected, gradient_keep])
+themed = d.recolor(
+    {'red': '#0044cc', 'lime': 'yellow'},
+    elements=[selected, gradient_selected])
+```
+
+Colors must come from presentation attributes or inline `style` attributes.
+External stylesheets and external resources are not resolved. If a selection
+depends on them, `dw.UnsupportedExternalResourceError` is raised explicitly.
+
+
 ### fill and stroke\_color
 
 Some color keyword names are:

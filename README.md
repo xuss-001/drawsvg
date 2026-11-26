@@ -198,6 +198,72 @@ d
 
 [![Example output image](https://raw.githubusercontent.com/cduck/drawsvg/master/examples/example2.svg?sanitize=true)](https://github.com/cduck/drawsvg/blob/master/examples/example2.svg)
 
+### Recoloring selected elements
+```python
+import drawsvg as draw
+
+d = draw.Drawing(240, 120)
+
+# A group color is inherited by children that do not set their own fill.
+selected_group = draw.Group(fill='red')
+selected_group.append(draw.Rectangle(10, 10, 60, 40))
+selected_group.append(draw.Rectangle(80, 10, 60, 40, fill='lime'))
+
+# This group is not selected, so it keeps its original colors.
+unselected_group = draw.Group(fill='red')
+unselected_group.append(draw.Rectangle(160, 10, 60, 40))
+
+gradient = draw.LinearGradient(10, 80, 220, 80)
+gradient.add_stop(0, 'red')
+gradient.add_stop(1, 'lime')
+selected_gradient_shape = draw.Rectangle(
+    10, 70, 100, 40, fill=gradient)
+unselected_gradient_shape = draw.Rectangle(
+    130, 70, 100, 40, fill=gradient)
+
+d.extend([
+    selected_group, unselected_group,
+    selected_gradient_shape, unselected_gradient_shape,
+])
+
+# The source drawing is not modified. Colors are matched by RGB value, so
+# '#ff0000' and 'rgb(255, 0, 0)' match the named color 'red'.
+themed = d.recolor(
+    {'red': '#0044cc', 'lime': 'yellow'},
+    elements=[selected_group, selected_gradient_shape])
+
+d.save_svg('before.svg')
+themed.save_svg('after.svg')
+```
+
+`Drawing.recolor()` (also `Drawing.replace_colors()` and the top-level
+`drawsvg.recolor()`) returns a new drawing and only changes the selected
+element subtrees. Selecting a group selects its descendants. Explicit child
+colors override inherited group colors and are recolored independently.
+
+Color keys are normalized before matching, so equivalent named colors, hex
+strings, and `rgb()`/`rgba()` values produce the same result. The replacement
+changes only the RGB channels: `fill-opacity`, `stroke-opacity`, `opacity`, and
+alpha embedded in the source color are retained. `fill="none"` and
+`fill="currentColor"` keep their original meaning; `currentColor` is not
+resolved to a different paint value.
+
+Shared gradients are cloned for the selected subtree and their `href`
+references are rewritten to the private clones, so recoloring one shape does
+not affect an unselected shape using the same gradient. Geometry, transforms,
+and opacity attributes are copied unchanged. Recoloring the same drawing more
+than once is deterministic.
+
+Colors must be defined by SVG presentation attributes or inline `style`
+attributes; CSS stylesheet selectors are not evaluated. External stylesheets
+and external resources are not resolved; if the drawing uses an external
+stylesheet or a selected element references an external resource,
+`drawsvg.UnsupportedExternalResourceError` is raised instead of producing an
+incorrect result.
+
+See `examples/recolor.py` for a runnable example that writes before/after SVG
+and PNG files.
+
 ### Duplicate geometry and clip paths
 ```python
 import drawsvg as draw
