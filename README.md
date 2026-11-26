@@ -96,6 +96,53 @@ d  # Display as SVG
 
 [![Example output image](https://raw.githubusercontent.com/cduck/drawsvg/master/examples/example1.png)](https://github.com/cduck/drawsvg/blob/master/examples/example1.svg)
 
+### Route labels placed at a distance along a polyline
+
+`draw.PolylineLabel` (and the functional form
+`draw.place_text_on_polyline(...)`) places text whose **center** sits at a
+target arc-length position on a polyline and rotates the text with the route.
+The caller supplies the text, the label `width`/`height` (final canvas units),
+the target `distance` and an endpoint `clearance` radius:
+
+```python
+pts = [(40, 120), (300, 120), (348, 150), (700, 96)]
+label = draw.PolylineLabel(
+        pts, 'ROUTE 9', width=118, height=24,
+        distance=150, clearance=16,
+        fill='#1f77b4', font_size=15, font_weight='bold',
+        show_bounds=True)        # optional red rectangle + center marker
+d.append(label)                  # append at the drawing root (canvas coords)
+print(label.center, label.angle_deg, label.corners, label.adjusted)
+```
+
+Geometry is always solved in **final canvas coordinates**.  Pass a nested
+element plus `root=drawing` (the transform chain is walked), pass
+`transform='translate(...) rotate(...) scale(sx, sy)'`, or just nest the line
+in groups and the parent transform chain is picked up automatically.  Length
+and tangent then reflect nested translation, rotation and non-uniform scaling.
+Consecutive duplicate points are ignored.
+
+The full oriented label rectangle must stay outside the two disks centered on
+the route endpoints with radius `clearance`.  If the requested center violates
+this it is slid along the route by the smallest possible amount; if no position
+works an `InsufficientSpaceForLabelError` (a `ValueError`/`RuntimeError`) is
+raised.  Text size and route geometry are never changed, and the source
+polyline is never modified.
+
+Text is normalized to an upright angle in `(-90°, 90°]`, so a reversed route
+yields the same readable orientation and never renders upside down.  When the
+center lies exactly on a corner the default `corner_direction='outgoing'` uses
+the segment leaving the vertex (the final endpoint uses the last segment);
+`'incoming'`, `'bisector'` (reversal-symmetric angle bisector), `'longer'` and
+`'auto'` (best clearance) are also available.  Use
+`draw.layout_polyline_label(...)` for the pure `LabelPlacement` geometry object.
+
+Run `python examples/polyline_labels.py` to render
+`examples/polyline-labels.svg`/`.png` covering long+short segments, reversed
+routes, nested transforms, nearest adjustment, corner rules and the fit error.
+
+![Polyline label example](examples/polyline-labels.png)
+
 ### SVG-native animation with playback controls
 ```python
 import drawsvg as draw

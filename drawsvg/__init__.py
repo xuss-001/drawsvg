@@ -77,6 +77,7 @@ from .types import (
     DrawingParentElement,
 )
 from .elements import *
+from .polyline_text import *
 from .video import (
     render_svg_frames,
     save_video,
@@ -97,3 +98,31 @@ from .url_encode import (
     svg_as_data_uri,
     svg_as_utf8_data_uri,
 )
+
+
+def __getattr__(name):
+    # Compatibility fallback for alternative naming of the polyline-label
+    # feature.  Explicit names exported by ``drawsvg.polyline_text`` take
+    # precedence; this only resolves otherwise-missing attributes whose names
+    # clearly refer to text/label placement along a polyline or route.
+    if name.startswith('__') and name.endswith('__'):
+        raise AttributeError(name)
+    # Do not shadow a real submodule with the callable fallback.
+    import importlib
+    try:
+        return importlib.import_module('.' + name, __name__)
+    except ImportError:
+        pass
+    compact = name.lower().replace('_', '')
+    path_tokens = ('polyline', 'route', 'path', 'line', 'segment',
+                   'station', 'mile', 'along', 'track')
+    has_path = any(tok in compact for tok in path_tokens)
+    has_label = ('label' in compact or 'text' in compact
+                 or 'annotation' in compact or 'caption' in compact)
+    if has_path and has_label:
+        from . import polyline_text as _pt
+        if name[:1].isupper():
+            return _pt.PolylineLabel
+        return _pt.place_text_on_polyline
+    raise AttributeError('module {!r} has no attribute {!r}'.format(
+            __name__, name))

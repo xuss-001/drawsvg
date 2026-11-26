@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1080" height="1192" viewBox="0 0 1080 1192">
+<defs>
+</defs>
+<rect x="0" y="0" width="1080" height="1192" fill="white" />
+<text x="24" y="28" font-size="22" fill="#111" font-weight="bold" text-anchor="start" dominant-baseline="central">Polyline route labels: distance positioning, orientation and endpoint clearance</text>
+<rect x="16" y="64" width="1048" height="168" rx="10" ry="10" fill="#fafbfc" stroke="#e3e6e8" stroke-width="1" />
+<text x="34" y="89" font-size="17" fill="#111" font-weight="bold" text-anchor="start" dominant-baseline="central">1. Long + short segments</text>
+<text x="34" y="110" font-size="12.5" fill="#5f6368" text-anchor="start" dominant-baseline="central">Center at target arc distance; tangent follows the segment under the center. Green disks = endpoint clearance regions.</text>
+<path d="M70,184 L330,184 L344,192 L348,214 L600,214 L905,162" fill="none" stroke="#7a7f85" stroke-width="2.4" stroke-linejoin="round" />
+<circle cx="70" cy="184" r="2.6" fill="white" stroke="#9aa0a6" stroke-width="1.4" />
+<circle cx="330" cy="184" r="2.6" fill="white" stroke="#9aa0a6" stroke-width="1.4" />
+<circle cx="344" cy="192" r="2.6" fill="white" stroke="#9aa0a6" stroke-width="1.4" />
+<circle cx="348" cy="214" r="2.6" fill="white" stroke="#9aa0a6" stroke-width="1.4" />
+<circle cx="600" cy="214" r="2.6" fill="white" stroke="#9aa0a6" stroke-width="1.4" />
+<circle cx="905" cy="162" r="2.6" fill="white" stroke="#9aa0a6" stroke-width="1.4" />
+<circle cx="70" cy="184" r="16" fill="#2ca02c" fill-opacity="0.1" stroke="#2ca02c" stroke-width="1.4" stroke-dasharray="5 4" />
+<circle cx="70" cy="184" r="3.2" fill="#111" />
+<circle cx="905" cy="162" r="16" fill="#2ca02c" fill-opacity="0.1" stroke="#2ca02c" stroke-width="1.4" stroke-dasharray="5 4" />
+<circle cx="905" cy="162" r="3.2" fill="#111" />
+<g transform="translate(220,184) rotate(0)">
+<rect x="-59.0" y="-12.0" width="118.0" height="24.0" fill="white" stroke="#d62728" stroke-width="1.5" stroke-dasharray="5 3" fill-opacity="0.92" />
+<circle cx="0" cy="0" r="2.5" fill="#d62728" stroke="white" stroke-width="0.8" />
+<text x="0" y="0" font-size="15" fill="#1f77b4" font-weight="bold" text-anchor="middle" dominant-baseline="central">LONG-SHORT</text>
+</g>
+<rect x="16" y="248" width="1048" height="168" rx="10" ry="10" fill="#fafbfc" stroke="#e3e6e8" stroke-width="1" />
+<text x="34" y="273" font-size="17" fill="#111" font-weight="bold" text-anchor="start" dominant-baseline="central">2. Forward vs. reversed route</text>
+<text x="34" y="294" font-size="12.5" fill="#5f6368" text-anchor="start" dominant-baseline="central">The same sloped segment in forward and reversed point order; upright normalization yields the same readable angle.</text>
+<path d="M120,332 L470,374" stroke="#9aa0a6" stroke-width="2.4" />
+<path d="M610,332 L960,374" stroke="#9aa0a6" stroke-width="2.4" />
+<g transform="translate(295,353) rotate(6.842773413)">
+<rect x="-48.0" y="-11.0" width="96.0" height="22.0" fill="white" stroke="#d62728" stroke-width="1.5" stroke-dasharray="5 3" fill-opacity="0.92" />
+<circle cx="0" cy="0" r="2.5" fill="#d62728" stroke="white" stroke-width="0.8" />
+<text x="0" y="0" font-size="15" fill="#1f77b4" font-weight="bold" text-anchor="middle" dominant-baseline="central">FORWARD</text>
+</g>
+<g transform="translate(785,353) rotate(6.842773413)">
+<rect x="-52.0" y="-11.0" width="104.0" height="22.0" fill="white" stroke="#d62728" stroke-width="1.5" stroke-dasharray="5 3" fill-opacity="0.92" />
+<circle cx="0" cy="0" r="2.5" fill="#d62728" stroke="white" stroke-width="0.8" />
+<text x="0" y="0" font-size="15" fill="#1f77b4" font-weight="bold" text-anchor="middle" dominant-baseline="central">REVERSED</text>
+</g>
+<text x="295" y="398" font-size="12.5" fill="#9aa0a6" text-anchor="middle">travel -&gt;</text>
+<text x="785" y="398" font-size="12.5" fill="#9aa0a6" text-anchor="middle">travel &lt;- (point list reversed)</text>
+<rect x="16" y="432" width="1048" height="168" rx="10" ry="10" fill="#fafbfc" stroke="#e3e6e8" stroke-width="1" />
+<text x="34" y="457" font-size="17" fill="#111" font-weight="bold" text-anchor="start" dominant-baseline="central">3. Nested translate / rotate / non-uniform scale</text>
+<text x="34" y="478" font-size="12.5" fill="#5f6368" text-anchor="start" dominant-baseline="central">Length and tangent use the full transformed geometry; the label is an unscaled canvas box appended at the drawing root.</text>
+<g transform="translate(150,560) scale(1.5,0.85)">
+<g transform="rotate(-18)">
+<path d="M0,0 L220,0 L260,42 L360,42" fill="none" stroke="#9aa0a6" stroke-width="2.4" />
+</g>
+</g>
+<g transform="translate(297.5203265,532.8383862) rotate(-10.43252307)">
+<rect x="-66.0" y="-12.0" width="132.0" height="24.0" fill="white" stroke="#d62728" stroke-width="1.5" stroke-dasharray="5 3" fill-opacity="0.92" />
+<circle cx="0" cy="0" r="2.5" fill="#d62728" stroke="white" stroke-width="0.8" />
+<text x="0" y="0" font-size="15" fill="#1f77b4" font-weight="bold" text-anchor="middle" dominant-baseline="central">TRANSFORMED</text>
+</g>
+<circle cx="150.0" cy="560.0" r="14" fill="#2ca02c" fill-opacity="0.1" stroke="#2ca02c" stroke-width="1.4" stroke-dasharray="5 4" />
+<circle cx="150.0" cy="560.0" r="3.2" fill="#111" />
+<circle cx="683.0385894450045" cy="499.39351735300306" r="14" fill="#2ca02c" fill-opacity="0.1" stroke="#2ca02c" stroke-width="1.4" stroke-dasharray="5 4" />
+<circle cx="683.0385894450045" cy="499.39351735300306" r="3.2" fill="#111" />
+<rect x="16" y="616" width="1048" height="168" rx="10" ry="10" fill="#fafbfc" stroke="#e3e6e8" stroke-width="1" />
+<text x="34" y="641" font-size="17" fill="#111" font-weight="bold" text-anchor="start" dominant-baseline="central">4. Automatic nearest adjustment for clearance</text>
+<text x="34" y="662" font-size="12.5" fill="#5f6368" text-anchor="start" dominant-baseline="central">Requested center (gray ghost box) intrudes into the start disk, so the label slides along the route by the minimum amount.</text>
+<path d="M110,726 L930,726" stroke="#9aa0a6" stroke-width="2.4" />
+<circle cx="110" cy="726" r="22" fill="#2ca02c" fill-opacity="0.1" stroke="#2ca02c" stroke-width="1.4" stroke-dasharray="5 4" />
+<circle cx="110" cy="726" r="3.2" fill="#111" />
+<circle cx="930" cy="726" r="22" fill="#2ca02c" fill-opacity="0.1" stroke="#2ca02c" stroke-width="1.4" stroke-dasharray="5 4" />
+<circle cx="930" cy="726" r="3.2" fill="#111" />
+<rect x="90.0" y="714.0" width="120" height="24" fill="#9aa0a6" fill-opacity="0.18" stroke="#9aa0a6" stroke-width="1.4" stroke-dasharray="6 4" />
+<path d="M150.0,714 L150.0,738" stroke="#9aa0a6" stroke-width="2" />
+<text x="150.0" y="702" font-size="12" fill="#5f6368" text-anchor="middle">requested s=40</text>
+<g transform="translate(192,726) rotate(0)">
+<rect x="-60.0" y="-12.0" width="120.0" height="24.0" fill="white" stroke="#d62728" stroke-width="1.5" stroke-dasharray="5 3" fill-opacity="0.92" />
+<circle cx="0" cy="0" r="2.5" fill="#d62728" stroke="white" stroke-width="0.8" />
+<text x="0" y="0" font-size="15" fill="#1f77b4" font-weight="bold" text-anchor="middle" dominant-baseline="central">ADJUSTED</text>
+</g>
+<path d="M150.0,758 L192.0,758" stroke="#d62728" stroke-width="1.6" />
+<circle cx="150.0" cy="758" r="2.4" fill="#9aa0a6" />
+<circle cx="192.0" cy="758" r="2.6" fill="#d62728" />
+<text x="171.0" y="770" font-size="12.5" fill="#d62728" text-anchor="middle">+42 units</text>
+<rect x="16" y="800" width="1048" height="168" rx="10" ry="10" fill="#fafbfc" stroke="#e3e6e8" stroke-width="1" />
+<text x="34" y="825" font-size="17" fill="#111" font-weight="bold" text-anchor="start" dominant-baseline="central">5. Label center exactly at a corner</text>
+<text x="34" y="846" font-size="12.5" fill="#5f6368" text-anchor="start" dominant-baseline="central">Default outgoing-segment rule (left) vs. optional angle bisector (right); both deterministic.</text>
+<path d="M150,874 L250,874 L322,946" fill="none" stroke="#9aa0a6" stroke-width="2.4" stroke-linejoin="round" />
+<g transform="translate(250,874) rotate(45)">
+<rect x="-25.0" y="-10.0" width="50.0" height="20.0" fill="white" stroke="#d62728" stroke-width="1.5" stroke-dasharray="5 3" fill-opacity="0.92" />
+<circle cx="0" cy="0" r="2.5" fill="#d62728" stroke="white" stroke-width="0.8" />
+<text x="0" y="0" font-size="13" fill="#1f77b4" font-weight="bold" text-anchor="middle" dominant-baseline="central">OUT</text>
+</g>
+<text x="240" y="960" font-size="12.5" fill="#5f6368" text-anchor="middle">corner_direction='outgoing'</text>
+<path d="M620,874 L720,874 L792,946" fill="none" stroke="#9aa0a6" stroke-width="2.4" stroke-linejoin="round" />
+<g transform="translate(720,874) rotate(22.5)">
+<rect x="-25.0" y="-10.0" width="50.0" height="20.0" fill="white" stroke="#d62728" stroke-width="1.5" stroke-dasharray="5 3" fill-opacity="0.92" />
+<circle cx="0" cy="0" r="2.5" fill="#d62728" stroke="white" stroke-width="0.8" />
+<text x="0" y="0" font-size="13" fill="#1f77b4" text-anchor="middle" dominant-baseline="central">BIS</text>
+</g>
+<text x="710" y="960" font-size="12.5" fill="#5f6368" text-anchor="middle">corner_direction='bisector'</text>
+<rect x="16" y="984" width="1048" height="168" rx="10" ry="10" fill="#fafbfc" stroke="#e3e6e8" stroke-width="1" />
+<text x="34" y="1009" font-size="17" fill="#111" font-weight="bold" text-anchor="start" dominant-baseline="central">6. Insufficient space reports a clear error</text>
+<text x="34" y="1030" font-size="12.5" fill="#5f6368" text-anchor="start" dominant-baseline="central">Text is never shrunk and the route is never changed; an InsufficientSpaceForLabelError (a ValueError) is raised.</text>
+<path d="M120,1090 L260,1090" stroke="#9aa0a6" stroke-width="2.4" />
+<circle cx="120" cy="1090" r="30" fill="#2ca02c" fill-opacity="0.1" stroke="#2ca02c" stroke-width="1.4" stroke-dasharray="5 4" />
+<circle cx="120" cy="1090" r="3.2" fill="#111" />
+<circle cx="260" cy="1090" r="30" fill="#2ca02c" fill-opacity="0.1" stroke="#2ca02c" stroke-width="1.4" stroke-dasharray="5 4" />
+<circle cx="260" cy="1090" r="3.2" fill="#111" />
+<rect x="360" y="1060" width="680" height="62" rx="8" ry="8" fill="#fdecea" stroke="#d62728" stroke-width="1.4" />
+<text x="378" y="1082" font-size="15" fill="#a50e0e" font-weight="bold" text-anchor="start" dominant-baseline="central">raise InsufficientSpaceForLabelError</text>
+<text x="378" y="1105" font-size="12.5" fill="#a50e0e" text-anchor="start" dominant-baseline="central">subclass of ValueError / RuntimeError</text>
+</svg>

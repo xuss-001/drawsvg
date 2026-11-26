@@ -146,14 +146,19 @@ class Drawing:
             self.ordered_elements[z].append(element)
         else:
             self.elements.append(element)
+        types._adopt_parent(element, self)
     def extend(self, iterable, *, z=None):
+        items = list(iterable)
         if z is not None:
-            self.ordered_elements[z].extend(iterable)
+            self.ordered_elements[z].extend(items)
         else:
-            self.elements.extend(iterable)
+            self.elements.extend(items)
+        for element in items:
+            types._adopt_parent(element, self)
     def insert(self, i, element):
         '''Inserts a top-level element at the given array index.'''
         self.elements.insert(i, element)
+        types._adopt_parent(element, self)
     def remove(self, element):
         '''Removes a top-level element (except those with a z-index).'''
         self.elements.remove(element)

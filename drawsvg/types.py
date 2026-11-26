@@ -161,6 +161,12 @@ class DrawingElement:
 
     Subclasses must implement write_svg_element.
     '''
+    def __getstate__(self):
+        # Don't serialize the private transform-chain back-reference.
+        state = getattr(self, '__dict__', {}).copy()
+        state.pop('_drawsvg_parent', None)
+        return state
+
     def write_svg_element(self, id_map, is_duplicate, output_file, lcontext,
                           dry_run, force_dup=False):
         raise NotImplementedError('Abstract base class')
@@ -185,6 +191,19 @@ class DrawingElement:
                 output_file.write('\n')
     def __eq__(self, other):
         return self is other
+
+
+def _adopt_parent(element, parent):
+    '''Record a private back-reference for transform-chain introspection.
+
+    This never affects SVG output or equality; an element shared by several
+    parents simply reports its most recent parent.
+    '''
+    if isinstance(element, DrawingElement):
+        try:
+            element._drawsvg_parent = parent
+        except Exception:
+            pass
 
 
 class DrawingBasicElement(DrawingElement):
@@ -334,6 +353,7 @@ class DrawingBasicElement(DrawingElement):
 class DrawingParentElement(DrawingBasicElement):
     '''Base class for SVG elements that can have child nodes.'''
     has_content = True
+
     def __init__(self, children=(), ordered_children=None, **args):
         super().__init__(**args)
         self.children = list(children)
@@ -361,15 +381,20 @@ class DrawingParentElement(DrawingBasicElement):
             self.ordered_children[z].append(element)
         else:
             self.children.append(element)
+        _adopt_parent(element, self)
     def extend(self, iterable, *, z=None):
         self.check_children_allowed()
+        items = list(iterable)
         if z is not None:
-            self.ordered_children[z].extend(iterable)
+            self.ordered_children[z].extend(items)
         else:
-            self.children.extend(iterable)
+            self.children.extend(items)
+        for element in items:
+            _adopt_parent(element, self)
     def insert(self, index, element):
         self.check_children_allowed()
         self.children.insert(index, element)
+        _adopt_parent(element, self)
     def write_content(self, id_map, is_duplicate, output_file, lcontext,
                       dry_run):
         pass
