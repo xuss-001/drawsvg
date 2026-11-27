@@ -96,6 +96,35 @@ d  # Display as SVG
 
 [![Example output image](https://raw.githubusercontent.com/cduck/drawsvg/master/examples/example1.png)](https://github.com/cduck/drawsvg/blob/master/examples/example1.svg)
 
+### Automatic viewBox fitting
+Set `auto_viewbox=True` to fit the canvas to the drawing's geometry instead of
+calculating bounds by hand.  `padding` adds the same empty space on all four
+sides.  Width and height may be omitted to use the fitted size.
+
+```python
+p = draw.Path(fill='#1166cc')
+p.M(0, 0).Q(50, -40, 100, 0).Z()
+
+rotated = draw.Group(transform='rotate(90)')
+rotated.append(p)
+scaled = draw.Group(transform='translate(10,-5) scale(2,1)')
+scaled.append(rotated)
+reflected = draw.Group(transform='scale(1,-1)')
+reflected.append(scaled)
+
+d = draw.Drawing(auto_viewbox=True, padding=12)
+d.append(reflected)
+d.save_svg('auto_viewbox.svg')
+```
+
+The fitted box includes the true extrema of lines, quadratic and cubic Beziers,
+elliptical arcs, closed subpaths, and nested affine transforms.  It measures
+geometry only: stroke, markers, text, filters, and external resources are
+ignored.  A drawing with no measurable geometry raises `EmptyDrawingError`;
+visible elements that cannot be measured safely raise
+`UnsupportedGeometryError` instead of being silently skipped.  Manual
+`viewBox` values and `d.view_box = (...)` continue to work unchanged.
+
 ### SVG-native animation with playback controls
 ```python
 import drawsvg as draw

@@ -22,6 +22,23 @@ It is recommended to use a unique `id_prefix` for each svg if you embed multiple
 d = dw.Drawing(400, 300, id_prefix='pic')
 ```
 
+To fit the viewBox to the drawing instead:
+
+```python
+d = dw.Drawing(auto_viewbox=True, padding=10)
+d.append(dw.Rectangle(-20, 30, 100, 40))
+d.append(dw.Circle(120, 10, 25))
+print(d.view_box)  # Includes 10 units of padding on every side
+```
+
+Automatic fitting supports rectangles, circles, ellipses, lines/polylines, and
+paths containing all line, quadratic/cubic Bezier, and elliptical-arc commands,
+including relative commands and nested transforms.  It measures geometry only,
+so strokes, text, filters, and external resources are not included.  If there
+is no geometry, drawing fails with `EmptyDrawingError`; unsupported visible
+elements raise `UnsupportedGeometryError`.  Set a fixed box with
+`d.view_box = (x, y, width, height)` or keep using a manual `viewBox` argument.
+
 
 ## Basic Shapes
 

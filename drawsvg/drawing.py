@@ -1,13 +1,14 @@
 import dataclasses
 from io import StringIO
 from collections import defaultdict
+import math
 import random
 import string
 import xml.sax.saxutils as xml
 
 from . import (
     types, elements as elements_module, raster, video, jupyter,
-    native_animation, font_embed,
+    native_animation, font_embed, geometry,
 )
 
 
@@ -30,9 +31,12 @@ class Drawing:
     Supports Jupyter: If a Drawing is the last line of a cell, it will be
     displayed as an SVG below.
     '''
-    def __init__(self, width, height, origin=(0,0), context: types.Context=None,
+    def __init__(self, width=None, height=None, origin=(0,0),
+                 context: types.Context=None,
                  animation_config: native_animation.SyncedAnimationConfig | None=None,
-                 id_prefix='d', unit='', **svg_args):
+                 id_prefix='d', unit='', auto_viewbox=False, padding=0,
+                 auto_view_box=None, viewbox_padding=None,
+                 view_box_padding=None, **svg_args):
         '''
         Args:
             width: The width of the SVG canvas, in units of pixels by default.
@@ -49,7 +53,36 @@ class Drawing:
             unit: Any supported SVG unit, such as 'px' or 'mm', to be used in the `width` and
                 `height` attributes of the `<svg>` tag.  All position and size values in this
                 drawing will be in this unit.
+            auto_viewbox: If True, calculate the viewBox from the drawing's
+                geometry when it is used.  Text, images, strokes, filters, and
+                external resources are not included.
+            padding: Equal empty space added on all four sides of an
+                automatically calculated viewBox.
         '''
+        if auto_view_box is not None:
+            auto_viewbox = auto_view_box
+        if viewbox_padding is not None:
+            padding = viewbox_padding
+        if view_box_padding is not None:
+            padding = view_box_padding
+        if isinstance(origin, str) and origin.lower() in ('auto', 'fit'):
+            auto_viewbox = True
+            origin = 'top-left'
+        if (isinstance(svg_args.get('viewBox'), str)
+                and svg_args['viewBox'].strip().lower() in ('auto', 'fit')):
+            auto_viewbox = True
+            del svg_args['viewBox']
+        auto_width = width is None
+        auto_height = height is None
+        if auto_viewbox and width is None and height is None:
+            width = height = 0
+        if width is None or height is None:
+            raise TypeError(
+                'width and height are required unless auto_viewbox=True is '
+                'used without either dimension')
+        padding = float(padding)
+        if not math.isfinite(padding) or padding < 0:
+            raise ValueError('padding must be a finite, non-negative number')
         if context is None:
             context = types.Context()
         if animation_config is not None:
@@ -87,6 +120,10 @@ class Drawing:
         self.context = context
         self.id_prefix = str(id_prefix)
         self.unit = unit
+        self._auto_viewbox = bool(auto_viewbox)
+        self._viewbox_padding = padding
+        self._auto_width = auto_width
+        self._auto_height = auto_height
         self.svg_args = {}
         self._cached_context = None
         self._cached_extra_prepost_with_context = None
@@ -96,6 +133,94 @@ class Drawing:
             if k[-1] == '-':
                 k = k[:-1]
             self.svg_args[k] = v
+    @property
+    def view_box(self):
+        '''The current viewBox, calculated from geometry when auto-fitting.'''
+        if self._auto_viewbox:
+            return self.calc_view_box(self._viewbox_padding)
+        return self._manual_view_box
+    @view_box.setter
+    def view_box(self, value):
+        self._manual_view_box = tuple(value)
+        self._auto_viewbox = False
+    viewbox = view_box
+    @property
+    def auto_viewbox(self):
+        return self._auto_viewbox
+    @auto_viewbox.setter
+    def auto_viewbox(self, value):
+        self._auto_viewbox = bool(value)
+    @property
+    def auto_view_box(self):
+        return self._auto_viewbox
+    @auto_view_box.setter
+    def auto_view_box(self, value):
+        self._auto_viewbox = bool(value)
+    @property
+    def padding(self):
+        return self._viewbox_padding
+    @padding.setter
+    def padding(self, value):
+        value = float(value)
+        if not math.isfinite(value) or value < 0:
+            raise ValueError('padding must be a finite, non-negative number')
+        self._viewbox_padding = value
+    viewbox_padding = padding
+    view_box_padding = padding
+    def calc_view_box(self, padding=None):
+        '''Return a viewBox fitted to all supported geometry.
+
+        Args:
+            padding: Equal space to add on every side.  Defaults to the
+                drawing's configured padding.
+        '''
+        if padding is None:
+            padding = self._viewbox_padding
+        padding = float(padding)
+        if not math.isfinite(padding) or padding < 0:
+            raise ValueError('padding must be a finite, non-negative number')
+        drawing_elements = list(self.elements)
+        for z in sorted(self.ordered_elements):
+            drawing_elements.extend(self.ordered_elements[z])
+        bounds = geometry.drawing_bounds(
+            drawing_elements, transform=self.svg_args.get('transform'))
+        view_box = bounds.as_tuple(padding)
+        if self._auto_width:
+            self.width = view_box[2]
+        if self._auto_height:
+            self.height = view_box[3]
+        return view_box
+    calc_viewbox = calc_view_box
+    calculate_view_box = calc_view_box
+    def set_auto_viewbox(self, padding=None):
+        '''Enable automatic viewBox fitting, optionally setting padding.'''
+        if padding is not None:
+            self.padding = padding
+        self._auto_viewbox = True
+        return self
+    set_auto_view_box = set_auto_viewbox
+    def set_manual_view_box(self, view_box):
+        '''Use a fixed viewBox and disable automatic fitting.'''
+        self.view_box = view_box
+        return self
+    def set_view_box(self, view_box=None, *, auto=False, padding=None):
+        '''Set a fixed viewBox, or enable fitting with ``auto=True``.'''
+        if auto or (isinstance(view_box, str)
+                    and view_box.lower() in ('auto', 'fit')):
+            return self.set_auto_viewbox(padding)
+        if view_box is None:
+            return self.fit_view_box(padding)
+        return self.set_manual_view_box(view_box)
+    set_viewbox = set_view_box
+    def fit_view_box(self, padding=None):
+        '''Calculate the fitted viewBox and store it as a fixed viewBox.'''
+        view_box = self.calc_view_box(padding)
+        self.view_box = view_box
+        return self
+    fit_viewbox = fit_view_box
+    fit_to_contents = fit_view_box
+    set_view_box_to_contents = fit_view_box
+    set_viewbox_to_contents = fit_view_box
     def set_render_size(self, w=None, h=None):
         self.render_width = w
         self.render_height = h
@@ -106,15 +231,22 @@ class Drawing:
         self.pixel_scale = s
         return self
     def calc_render_size(self):
+        base_width, base_height = self.width, self.height
+        if self._auto_viewbox and (self._auto_width or self._auto_height):
+            auto_view_box = self.calc_view_box()
+            if self._auto_width:
+                base_width = auto_view_box[2]
+            if self._auto_height:
+                base_height = auto_view_box[3]
         if self.render_width is None and self.render_height is None:
-            return (self.width * self.pixel_scale,
-                    self.height * self.pixel_scale)
+            return (base_width * self.pixel_scale,
+                    base_height * self.pixel_scale)
         elif self.render_width is None:
-            s = self.render_height / self.height
-            return self.width * s, self.render_height
+            s = self.render_height / base_height
+            return base_width * s, self.render_height
         elif self.render_height is None:
-            s = self.render_width / self.width
-            return self.render_width, self.height * s
+            s = self.render_width / base_width
+            return self.render_width, base_height * s
         else:
             return self.render_width, self.render_height
     def draw(self, obj, *, z=None, **kwargs):
@@ -261,9 +393,13 @@ class Drawing:
         if self.unit:
             img_width = f'{img_width}{self.unit}'
             img_height = f'{img_height}{self.unit}'
+        if 'viewBox' in self.svg_args:
+            view_box = self.svg_args['viewBox']
+        else:
+            view_box = self.view_box
         svg_args = dict(
                 width=img_width, height=img_height,
-                viewBox=' '.join(map(str, self.view_box)))
+                viewBox=' '.join(map(str, view_box)))
         svg_args.update(self.svg_args)
         output_file.write(SVG_START)
         context.write_svg_document_args(self, svg_args, output_file)
